@@ -1,0 +1,10 @@
+{
+  "extends": "./tsconfig.node.json",
+  "compilerOptions": {
+    "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.worker.tsbuildinfo",
+    "lib": ["ES2023"],
+    "types": ["@cloudflare/workers-types"],
+    "moduleResolution": "bundler"
+  },
+  "include": ["src/worker/**/*.ts", "worker-configuration.d.ts"]
+}

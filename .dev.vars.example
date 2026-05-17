@@ -1,0 +1,4 @@
+# 复制为 .dev.vars（勿提交仓库）
+# 第一行必须是 ADMIN_TOKEN=，中间不要有空格
+ADMIN_TOKEN=shumengya520
+# ENCRYPTION_KEY= 可选

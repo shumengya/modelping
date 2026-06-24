@@ -7,6 +7,10 @@ export type MonitorDto = {
   model: string;
   protocol: MonitorProtocol;
   interval_minutes: number;
+  /** 1=流式，0=非流式 */
+  probe_stream: number;
+  /** 1=首页展示卡片，0=仅后台可见 */
+  show_on_dashboard: number;
   enabled: number;
   category: string;
   created_at: number;
@@ -24,24 +28,11 @@ export type MonitorDto = {
     probe_input: string | null;
     probe_output: string | null;
   } | null;
-  timelineDaily: Array<{ t: number; up: boolean; ratio: number }>;
+  timelineDaily: Array<{ t: number; up: boolean; ratio: number; hasData: boolean }>;
 };
 
-/** 管理后台列表（无统计字段；interval_minutes 为全站统一值） */
-export type AdminMonitorRow = Pick<
-  MonitorDto,
-  | "id"
-  | "display_name"
-  | "api_base_url"
-  | "model"
-  | "protocol"
-  | "interval_minutes"
-  | "enabled"
-  | "category"
-  | "created_at"
-  | "last_run_at"
-  | "next_run_at"
->;
+/** 管理后台列表与公开面板共用数据结构（后台接口含统计字段） */
+export type AdminMonitorRow = MonitorDto;
 
 /** /api/admin/probe-settings 与后台表单 */
 export type GlobalProbeSettings = {

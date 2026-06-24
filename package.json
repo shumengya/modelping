@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
-    "deploy": "npm run build && wrangler deploy",
+    "deploy": "npm run build && wrangler deploy --config wrangler.json",
     "cf-typegen": "wrangler types",
     "secret:admin": "wrangler secret put ADMIN_TOKEN",
     "lint": "eslint .",
@@ -14,6 +14,7 @@
   },
   "dependencies": {
     "hono": "^4.12.19",
+    "lxgw-wenkai-webfont": "^1.7.0",
     "react": "^19.2.6",
     "react-dom": "^19.2.6",
     "react-router-dom": "^7.15.1"
@@ -33,6 +34,7 @@
     "typescript": "~6.0.2",
     "typescript-eslint": "^8.59.2",
     "vite": "^8.0.12",
+    "vite-plugin-pwa": "^1.3.0",
     "wrangler": "^4.92.0"
   }
 }

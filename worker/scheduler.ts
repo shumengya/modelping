@@ -119,6 +119,7 @@ export async function runSingleProbe(
       model: m.model,
       protocol: m.protocol,
       userMessage: userMsg,
+      stream: m.probe_stream !== 0,
     });
     try {
       await insertProbeEvent(db, {
@@ -156,6 +157,10 @@ export async function createMonitorFromPayload(
     protocol: "openai" | "openai_responses" | "claude";
     category?: string;
     enabled?: boolean;
+    /** 未传时默认流式 */
+    probe_stream?: boolean;
+    /** 未传时默认在首页展示 */
+    show_on_dashboard?: boolean;
   }
 ): Promise<{ id: string }> {
   const id = crypto.randomUUID();
@@ -175,6 +180,8 @@ export async function createMonitorFromPayload(
     api_key_nonce: nonceCopy.buffer.slice(nonceCopy.byteOffset, nonceCopy.byteOffset + nonceCopy.byteLength),
     last_run_at: null,
     next_run_at: nowSec,
+    probe_stream: body.probe_stream === false ? 0 : 1,
+    show_on_dashboard: body.show_on_dashboard === false ? 0 : 1,
   });
   return { id };
 }
@@ -191,6 +198,8 @@ export async function updateMonitorFromPayload(
     protocol: "openai" | "openai_responses" | "claude";
     category: string;
     enabled: boolean;
+    probe_stream: boolean;
+    show_on_dashboard: boolean;
   }>
 ): Promise<boolean> {
   const cur = await getMonitor(db, id);
@@ -214,6 +223,12 @@ export async function updateMonitorFromPayload(
     api_key_ciphertext: ciphertext,
     api_key_nonce: nonceBuf,
     next_run_at: nowSec,
+    probe_stream:
+      body.probe_stream !== undefined ? (body.probe_stream ? 1 : 0) : cur.probe_stream,
+    show_on_dashboard:
+      body.show_on_dashboard !== undefined
+        ? (body.show_on_dashboard ? 1 : 0)
+        : cur.show_on_dashboard,
   });
   return true;
 }

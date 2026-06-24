@@ -2,6 +2,11 @@
 
 在 Cloudflare Workers 上运行的大模型 API **流式首字延迟**与**可用性**监控面板：React + Vite 前端（Static Assets CDN）+ D1 存储（默认保留 30 天探测记录）+ 每分钟 Cron 调度。
 
+## 目录结构
+
+- [`frontend/`](frontend/)：React 前端（入口 [`frontend/index.html`](frontend/index.html)、源码 [`frontend/src/`](frontend/src/)）；根目录 [`vite.config.ts`](vite.config.ts) 将 `root` 指向此处，[`public/`](public/) 仍为静态资源目录。
+- [`worker/`](worker/)：Cloudflare Worker — Hono API、D1、加密与定时探测调度；入口见 [`wrangler.json`](wrangler.json) 的 `main` 字段。
+
 ## 功能概要
 
 - 管理端配置：API 根地址、API Key、模型名、协议（**OpenAI Chat Completions 经典** / **OpenAI Responses 新版** / Claude Anthropic）。

@@ -21,6 +21,5 @@
     "erasableSyntaxOnly": true,
     "noFallthroughCasesInSwitch": true
   },
-  "include": ["src"],
-  "exclude": ["src/worker"]
+  "include": ["frontend/src"]
 }

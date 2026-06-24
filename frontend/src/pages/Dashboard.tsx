@@ -1,25 +1,46 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { fetchMonitors } from "../api";
 import { MonitorCard } from "../components/MonitorCard";
+import { useAppBoot } from "../context/AppBootContext";
 import type { MonitorDto } from "../types";
 
+const REFRESH_MS = 60_000;
+
 export function Dashboard() {
+  const { signalBootReady } = useAppBoot();
   const [rows, setRows] = useState<MonitorDto[] | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [filterCat, setFilterCat] = useState<string>("__all__");
   const [q, setQ] = useState("");
 
-  const load = () => {
+  const load = useCallback(() => {
     fetchMonitors()
-      .then(setRows)
-      .catch(() => setErr("加载失败"));
-  };
+      .then((data) => {
+        setRows(data);
+        setErr(null);
+      })
+      .catch(() => {
+        setRows([]);
+        setErr("加载失败");
+      });
+  }, []);
 
   useEffect(() => {
     load();
-    const t = setInterval(load, 60_000);
-    return () => clearInterval(t);
-  }, []);
+    const t = setInterval(load, REFRESH_MS);
+    const onVis = () => {
+      if (document.visibilityState === "visible") load();
+    };
+    document.addEventListener("visibilitychange", onVis);
+    return () => {
+      clearInterval(t);
+      document.removeEventListener("visibilitychange", onVis);
+    };
+  }, [load]);
+
+  useEffect(() => {
+    if (rows !== null) signalBootReady();
+  }, [rows, signalBootReady]);
 
   const categories = useMemo(() => {
     const s = new Set<string>();
@@ -77,8 +98,6 @@ export function Dashboard() {
       </section>
 
       {err ? <p className="banner error">{err}</p> : null}
-
-      {!rows ? <p className="muted">加载中…</p> : null}
 
       {rows?.length === 0 ? <p className="muted">暂无监控项。请从管理入口添加。</p> : null}
 

@@ -1,5 +1,13 @@
 import { Hono } from "hono";
-import { availabilityAndTimeline, getAppSettings, getMonitor, listMonitorsPublic, updateAppSettings } from "./db";
+import {
+  availabilityAndTimeline,
+  availabilityAndTimelineBatch,
+  getAppSettings,
+  getMonitor,
+  listMonitorsPublic,
+  normMonitorId,
+  updateAppSettings,
+} from "./db";
 import {
   createMonitorFromPayload,
   deleteMonitor,
@@ -16,9 +24,31 @@ type MonitorCreateBody = {
   protocol: "openai" | "openai_responses" | "claude";
   category?: string;
   enabled?: boolean;
+  /** 未传时默认为流式 */
+  probe_stream?: boolean;
+  /** 未传时默认在首页展示 */
+  show_on_dashboard?: boolean;
 };
 
+function parseOptionalBool01(o: Record<string, unknown>, key: string): boolean | undefined {
+  const v = o[key];
+  if (typeof v === "boolean") return v;
+  if (v === 0) return false;
+  if (v === 1) return true;
+  return undefined;
+}
+
+function parseOptionalProbeStream(o: Record<string, unknown>): boolean | undefined {
+  return parseOptionalBool01(o, "probe_stream");
+}
+
 const app = new Hono<{ Bindings: Env }>();
+
+/** 避免边缘/浏览器把动态 JSON 缓存成「半套字段」，尤其带 Authorization 的请求易被错误复用 */
+app.use("/api/*", async (c, next) => {
+  c.header("Cache-Control", "private, no-store, max-age=0");
+  await next();
+});
 
 const ALLOWED = new Set([1, 5, 10, 30, 60, 360]);
 
@@ -65,6 +95,8 @@ async function parseMonitorCreate(c: { req: { json: () => Promise<unknown> } }):
   }
   const category = typeof o.category === "string" ? o.category : undefined;
   const enabled = typeof o.enabled === "boolean" ? o.enabled : undefined;
+  const probe_stream = parseOptionalProbeStream(o);
+  const show_on_dashboard = parseOptionalBool01(o, "show_on_dashboard");
   return {
     display_name,
     api_base_url,
@@ -73,54 +105,89 @@ async function parseMonitorCreate(c: { req: { json: () => Promise<unknown> } }):
     protocol,
     category,
     enabled,
+    probe_stream,
+    show_on_dashboard,
   };
 }
 
-async function withIntervalForApi(
-  db: D1Database,
-  rows: Awaited<ReturnType<typeof listMonitorsPublic>>
-): Promise<Array<(typeof rows)[number] & { interval_minutes: number }>> {
-  const s = await getAppSettings(db);
-  const iv = s.probe_interval_minutes;
-  return rows.map((m) => ({ ...m, interval_minutes: iv }));
+type MonitorRowWithInterval = Awaited<ReturnType<typeof listMonitorsPublic>>[number] & {
+  interval_minutes: number;
+};
+
+const TIMELINE_SHANGHAI_OFF = 8 * 3600;
+const TIMELINE_HALF_DAY_SEC = 12 * 60 * 60;
+const TIMELINE_SLOTS = 60;
+
+function currentTimelineSlotStart(nowSec: number): number {
+  return Math.floor((nowSec + TIMELINE_SHANGHAI_OFF) / TIMELINE_HALF_DAY_SEC) * TIMELINE_HALF_DAY_SEC - TIMELINE_SHANGHAI_OFF;
 }
 
-app.get("/api/monitors", async (c) => {
-  const db = c.env.DB;
-  const rows = await listMonitorsPublic(db);
-  const merged = await withIntervalForApi(db, rows);
-  const out = [];
-  for (const m of merged) {
-    const stats = await availabilityAndTimeline(db, m.id);
-    const timelineDaily = stats.daily.map((d) => ({
-      t: d.dayStart,
-      up: d.total > 0 && d.ok === d.total,
-      ratio: d.total > 0 ? d.ok / d.total : 0,
-    }));
-    out.push({
+function timelineDailyFromBuckets(daily: Array<{ dayStart: number; ok: number; total: number }>) {
+  const bySlot = new Map(daily.map((d) => [d.dayStart, d]));
+  const current = currentTimelineSlotStart(Math.floor(Date.now() / 1000));
+  const first = current - (TIMELINE_SLOTS - 1) * TIMELINE_HALF_DAY_SEC;
+
+  return Array.from({ length: TIMELINE_SLOTS }, (_, i) => {
+    const t = first + i * TIMELINE_HALF_DAY_SEC;
+    const d = bySlot.get(t);
+    const total = d?.total ?? 0;
+    const ratio = total > 0 ? (d?.ok ?? 0) / total : 0;
+    return {
+      t,
+      up: total > 0 && (d?.ok ?? 0) === total,
+      ratio,
+      hasData: total > 0,
+    };
+  });
+}
+
+async function monitorsDtoList(db: D1Database, merged: MonitorRowWithInterval[]) {
+  const statsMap = await availabilityAndTimelineBatch(
+    db,
+    merged.map((m) => m.id)
+  );
+  return merged.map((m) => {
+    const stats = statsMap.get(normMonitorId(m.id));
+    if (!stats) {
+      return {
+        ...m,
+        availability24h: null,
+        availability30d: null,
+        probe_count: 0,
+        lastProbe: null,
+        timelineDaily: [],
+      };
+    }
+    const timelineDaily = timelineDailyFromBuckets(stats.daily);
+    return {
       ...m,
       availability24h: stats.availability24h,
       availability30d: stats.availability30d,
       probe_count: stats.probe_count,
       lastProbe: stats.lastProbe,
       timelineDaily,
-    });
-  }
-  return c.json(out);
+    };
+  });
+}
+
+app.get("/api/monitors", async (c) => {
+  const db = c.env.DB;
+  const [rows, s] = await Promise.all([listMonitorsPublic(db, "dashboard"), getAppSettings(db)]);
+  const merged: MonitorRowWithInterval[] = rows.map((m) => ({
+    ...m,
+    interval_minutes: s.probe_interval_minutes,
+  }));
+  return c.json(await monitorsDtoList(db, merged));
 });
 
 app.get("/api/monitors/:id", async (c) => {
   const id = c.req.param("id");
   const db = c.env.DB;
-  const m = await getMonitor(db, id);
+  const [m, s] = await Promise.all([getMonitor(db, id), getAppSettings(db)]);
   if (!m) return c.json({ error: "not_found" }, 404);
-  const s = await getAppSettings(db);
+  if (m.show_on_dashboard === 0) return c.json({ error: "not_found" }, 404);
   const stats = await availabilityAndTimeline(db, id);
-  const timelineDaily = stats.daily.map((d) => ({
-    t: d.dayStart,
-    up: d.total > 0 && d.ok === d.total,
-    ratio: d.total > 0 ? d.ok / d.total : 0,
-  }));
+  const timelineDaily = timelineDailyFromBuckets(stats.daily);
   return c.json({
     id: m.id,
     display_name: m.display_name,
@@ -128,6 +195,8 @@ app.get("/api/monitors/:id", async (c) => {
     model: m.model,
     protocol: m.protocol,
     interval_minutes: s.probe_interval_minutes,
+    probe_stream: m.probe_stream,
+    show_on_dashboard: m.show_on_dashboard,
     enabled: m.enabled,
     category: m.category,
     created_at: m.created_at,
@@ -188,8 +257,12 @@ app.get("/api/admin/monitors", async (c) => {
   const err = checkAdmin(c);
   if (err) return err;
   const db = c.env.DB;
-  const rows = await listMonitorsPublic(db);
-  return c.json(await withIntervalForApi(db, rows));
+  const [rows, s] = await Promise.all([listMonitorsPublic(db, "all"), getAppSettings(db)]);
+  const merged: MonitorRowWithInterval[] = rows.map((m) => ({
+    ...m,
+    interval_minutes: s.probe_interval_minutes,
+  }));
+  return c.json(await monitorsDtoList(db, merged));
 });
 
 app.post("/api/admin/monitors", async (c) => {
@@ -220,6 +293,11 @@ app.put("/api/admin/monitors/:id", async (c) => {
     patch.protocol = body.protocol;
   if (typeof body.category === "string") patch.category = body.category;
   if (typeof body.enabled === "boolean") patch.enabled = body.enabled;
+  if (typeof body.probe_stream === "boolean") patch.probe_stream = body.probe_stream;
+  else if (body.probe_stream === 0 || body.probe_stream === 1) patch.probe_stream = body.probe_stream === 1;
+  if (typeof body.show_on_dashboard === "boolean") patch.show_on_dashboard = body.show_on_dashboard;
+  else if (body.show_on_dashboard === 0 || body.show_on_dashboard === 1)
+    patch.show_on_dashboard = body.show_on_dashboard === 1;
   try {
     const ok = await updateMonitorFromPayload(c.env, c.env.DB, id, patch);
     if (!ok) return c.json({ error: "not_found" }, 404);

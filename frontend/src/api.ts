@@ -1,8 +1,8 @@
-import type { AdminMonitorRow, GlobalProbeSettings, MonitorDto, MonitorProtocol } from "./types";
+import type { GlobalProbeSettings, MonitorDto, MonitorProtocol } from "./types";
 import { getAdminToken } from "./types";
 
 export async function fetchMonitors(): Promise<MonitorDto[]> {
-  const r = await fetch("/api/monitors");
+  const r = await fetch("/api/monitors", { cache: "no-store" });
   if (!r.ok) throw new Error("failed_to_load");
   return r.json() as Promise<MonitorDto[]>;
 }
@@ -24,12 +24,15 @@ export async function adminPing(token: string): Promise<AdminPingResult> {
   }
 }
 
-export async function adminListMonitors(): Promise<AdminMonitorRow[]> {
+export async function adminListMonitors(): Promise<MonitorDto[]> {
   const t = getAdminToken();
   if (!t) throw new Error("no_token");
-  const r = await fetch("/api/admin/monitors", { headers: { Authorization: `Bearer ${t}` } });
+  const r = await fetch("/api/admin/monitors", {
+    cache: "no-store",
+    headers: { Authorization: `Bearer ${t}` },
+  });
   if (!r.ok) throw new Error("admin_list_failed");
-  return r.json();
+  return r.json() as Promise<MonitorDto[]>;
 }
 
 export async function adminGetProbeSettings(): Promise<GlobalProbeSettings> {
@@ -70,6 +73,8 @@ type CreateBody = {
   protocol: MonitorProtocol;
   category?: string;
   enabled?: boolean;
+  probe_stream?: boolean;
+  show_on_dashboard?: boolean;
 };
 
 export async function adminCreateMonitor(body: CreateBody): Promise<string> {

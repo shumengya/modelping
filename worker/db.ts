@@ -55,6 +55,10 @@ export type MonitorRow = {
   api_key_nonce: ArrayBuffer;
   last_run_at: number | null;
   next_run_at: number;
+  /** 1 = 流式；0 = 非流式 */
+  probe_stream: number;
+  /** 1 = 首页卡片展示；0 = 仅后台可见 */
+  show_on_dashboard: number;
 };
 
 /** 列表 API 在合并 interval_minutes 之前的行 */
@@ -69,14 +73,20 @@ export type MonitorPublic = {
   created_at: number;
   last_run_at: number | null;
   next_run_at: number;
+  probe_stream: number;
+  show_on_dashboard: number;
 };
 
-export async function listMonitorsPublic(db: D1Database): Promise<MonitorPublic[]> {
+export async function listMonitorsPublic(
+  db: D1Database,
+  visibility: "all" | "dashboard" = "all"
+): Promise<MonitorPublic[]> {
+  const where = visibility === "dashboard" ? " WHERE show_on_dashboard = 1" : "";
   const r = await db
     .prepare(
       `SELECT id, display_name, api_base_url, model, protocol, enabled, category,
-              created_at, last_run_at, next_run_at
-       FROM monitors ORDER BY display_name ASC`
+              created_at, last_run_at, next_run_at, probe_stream, show_on_dashboard
+       FROM monitors${where} ORDER BY display_name ASC`
     )
     .all();
   return (r.results ?? []) as unknown as MonitorPublic[];
@@ -86,7 +96,8 @@ export async function listAllMonitors(db: D1Database): Promise<MonitorRow[]> {
   const r = await db
     .prepare(
       `SELECT id, display_name, api_base_url, model, protocol, enabled, category,
-              created_at, api_key_ciphertext, api_key_nonce, last_run_at, next_run_at
+              created_at, api_key_ciphertext, api_key_nonce, last_run_at, next_run_at, probe_stream,
+              show_on_dashboard
        FROM monitors ORDER BY display_name ASC`
     )
     .all();
@@ -97,7 +108,8 @@ export async function listDueMonitors(db: D1Database, nowSec: number): Promise<M
   const r = await db
     .prepare(
       `SELECT id, display_name, api_base_url, model, protocol, enabled, category,
-              created_at, api_key_ciphertext, api_key_nonce, last_run_at, next_run_at
+              created_at, api_key_ciphertext, api_key_nonce, last_run_at, next_run_at, probe_stream,
+              show_on_dashboard
        FROM monitors WHERE enabled = 1 AND next_run_at <= ? ORDER BY next_run_at ASC`
     )
     .bind(nowSec)
@@ -109,7 +121,8 @@ export async function getMonitor(db: D1Database, id: string): Promise<MonitorRow
   const r = await db
     .prepare(
       `SELECT id, display_name, api_base_url, model, protocol, enabled, category,
-              created_at, api_key_ciphertext, api_key_nonce, last_run_at, next_run_at
+              created_at, api_key_ciphertext, api_key_nonce, last_run_at, next_run_at, probe_stream,
+              show_on_dashboard
        FROM monitors WHERE id = ?`
     )
     .bind(id)
@@ -126,8 +139,9 @@ export async function insertMonitor(
   await db
     .prepare(
       `INSERT INTO monitors (id, display_name, api_base_url, model, protocol, enabled, category,
-        created_at, api_key_ciphertext, api_key_nonce, last_run_at, next_run_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        created_at, api_key_ciphertext, api_key_nonce, last_run_at, next_run_at, probe_stream,
+        show_on_dashboard)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     )
     .bind(
       row.id,
@@ -141,7 +155,9 @@ export async function insertMonitor(
       ct,
       nn,
       row.last_run_at,
-      row.next_run_at
+      row.next_run_at,
+      row.probe_stream,
+      row.show_on_dashboard
     )
     .run();
 }
@@ -159,6 +175,8 @@ export async function updateMonitorMeta(
     api_key_ciphertext: ArrayBuffer;
     api_key_nonce: ArrayBuffer;
     next_run_at: number;
+    probe_stream: number;
+    show_on_dashboard: number;
   }>
 ): Promise<void> {
   const cur = await getMonitor(db, id);
@@ -169,7 +187,8 @@ export async function updateMonitorMeta(
   await db
     .prepare(
       `UPDATE monitors SET display_name=?, api_base_url=?, model=?, protocol=?,
-       enabled=?, category=?, api_key_ciphertext=?, api_key_nonce=?, next_run_at=?
+       enabled=?, category=?, api_key_ciphertext=?, api_key_nonce=?, next_run_at=?, probe_stream=?,
+       show_on_dashboard=?
        WHERE id=?`
     )
     .bind(
@@ -182,6 +201,8 @@ export async function updateMonitorMeta(
       ct,
       nn,
       next.next_run_at,
+      next.probe_stream,
+      next.show_on_dashboard,
       id
     )
     .run();
@@ -235,11 +256,7 @@ export async function updateMonitorRunTimes(
     .run();
 }
 
-/** Per-day bucket: dayStart unix sec at UTC midnight approximation (floor to day in UTC) */
-export async function availabilityAndTimeline(
-  db: D1Database,
-  monitorId: string
-): Promise<{
+export type AvailabilityTimelineStats = {
   availability24h: number | null;
   availability30d: number | null;
   probe_count: number;
@@ -253,57 +270,18 @@ export async function availabilityAndTimeline(
     probe_input: string | null;
     probe_output: string | null;
   } | null;
-}> {
-  const now = Math.floor(Date.now() / 1000);
-  const start24 = now - 86400;
-  const start30 = now - THIRTY_DAYS_SEC;
+};
 
-  const lastProbe = await db
-    .prepare(
-      `SELECT ts, ok, first_token_ms, http_status, error_message, probe_input, probe_output FROM probe_events WHERE monitor_id = ? ORDER BY ts DESC LIMIT 1`
-    )
-    .bind(monitorId)
-    .first<{
-      ts: number;
-      ok: number;
-      first_token_ms: number | null;
-      http_status: number | null;
-      error_message: string | null;
-      probe_input: string | null;
-      probe_output: string | null;
-    }>();
+type LastProbeRow = NonNullable<AvailabilityTimelineStats["lastProbe"]>;
 
-  const stats24 = await db
-    .prepare(
-      `SELECT SUM(ok) AS okc, COUNT(*) AS total FROM probe_events WHERE monitor_id = ? AND ts >= ?`
-    )
-    .bind(monitorId, start24)
-    .first<{ okc: number | null; total: number | null }>();
-
-  const stats30 = await db
-    .prepare(
-      `SELECT SUM(ok) AS okc, COUNT(*) AS total FROM probe_events WHERE monitor_id = ? AND ts >= ?`
-    )
-    .bind(monitorId, start30)
-    .first<{ okc: number | null; total: number | null }>();
-
-  const rows = await db
-    .prepare(
-      `SELECT (CAST(ts / 86400 AS INTEGER) * 86400) AS day_start,
-              SUM(ok) AS okc,
-              COUNT(*) AS cnt
-       FROM probe_events WHERE monitor_id = ? AND ts >= ?
-       GROUP BY day_start ORDER BY day_start ASC`
-    )
-    .bind(monitorId, start30)
-    .all();
-
-  const countRow = await db
-    .prepare(`SELECT COUNT(*) AS c FROM probe_events WHERE monitor_id = ?`)
-    .bind(monitorId)
-    .first<{ c: number | null }>();
-
-  const daily = (rows.results ?? []).map((r) => ({
+function finalizeAvailabilityTimeline(
+  lastProbe: LastProbeRow | null | undefined,
+  stats24: { okc: number | null; total: number | null } | null | undefined,
+  stats30: { okc: number | null; total: number | null } | null | undefined,
+  dailyRaw: unknown[],
+  countRow: { c: number | null } | null | undefined
+): AvailabilityTimelineStats {
+  const daily = dailyRaw.map((r) => ({
     dayStart: Number((r as { day_start: number }).day_start),
     ok: Number((r as { okc: number | null }).okc ?? 0),
     total: Number((r as { cnt: number | null }).cnt ?? 0),
@@ -321,4 +299,72 @@ export async function availabilityAndTimeline(
     daily,
     lastProbe: lastProbe ?? null,
   };
+}
+
+/** 与 SQL bind / Map 查找统一，避免首尾空白或类型不一致导致 stats 对不上 */
+export function normMonitorId(id: unknown): string {
+  return String(id ?? "").trim();
+}
+
+/** 每个监控单独 batch（5 条语句），多监控并发；避免单次 mega-batch 下结果与语句顺序偶发错位 */
+const AV_STATS_PARALLEL_MONITORS = 12;
+
+/**
+ * 批量拉取多个监控的可用率与时间线（每位监控 1 次 `db.batch`，含 5 条 SELECT）。
+ */
+export async function availabilityAndTimelineBatch(
+  db: D1Database,
+  monitorIds: string[]
+): Promise<Map<string, AvailabilityTimelineStats>> {
+  const out = new Map<string, AvailabilityTimelineStats>();
+  const unique = [...new Set(monitorIds.map(normMonitorId).filter((id) => id.length > 0))];
+  if (unique.length === 0) return out;
+
+  const now = Math.floor(Date.now() / 1000);
+  const start24 = now - 86400;
+  const start30 = now - THIRTY_DAYS_SEC;
+
+  const sqlLast = `SELECT ts, ok, first_token_ms, http_status, error_message, probe_input, probe_output FROM probe_events WHERE monitor_id = ? ORDER BY ts DESC LIMIT 1`;
+  const sqlRange = `SELECT SUM(ok) AS okc, COUNT(*) AS total FROM probe_events WHERE monitor_id = ? AND ts >= ?`;
+  const sqlDaily = `SELECT (CAST((ts + 28800) / 43200 AS INTEGER) * 43200 - 28800) AS day_start,
+              SUM(ok) AS okc,
+              COUNT(*) AS cnt
+       FROM probe_events WHERE monitor_id = ? AND ts >= ?
+       GROUP BY day_start ORDER BY day_start ASC`;
+  const sqlCount = `SELECT COUNT(*) AS c FROM probe_events WHERE monitor_id = ?`;
+
+  async function fetchOne(monitorId: string): Promise<void> {
+    const batchResults = await db.batch([
+      db.prepare(sqlLast).bind(monitorId),
+      db.prepare(sqlRange).bind(monitorId, start24),
+      db.prepare(sqlRange).bind(monitorId, start30),
+      db.prepare(sqlDaily).bind(monitorId, start30),
+      db.prepare(sqlCount).bind(monitorId),
+    ]);
+
+    const lastProbe = batchResults[0].results?.[0] as LastProbeRow | undefined;
+    const stats24 = batchResults[1].results?.[0] as { okc: number | null; total: number | null } | undefined;
+    const stats30 = batchResults[2].results?.[0] as { okc: number | null; total: number | null } | undefined;
+    const dailyRaw = batchResults[3].results ?? [];
+    const countRow = batchResults[4].results?.[0] as { c: number | null } | undefined;
+
+    out.set(monitorId, finalizeAvailabilityTimeline(lastProbe, stats24, stats30, dailyRaw, countRow));
+  }
+
+  for (let off = 0; off < unique.length; off += AV_STATS_PARALLEL_MONITORS) {
+    const slice = unique.slice(off, off + AV_STATS_PARALLEL_MONITORS);
+    await Promise.all(slice.map((id) => fetchOne(id)));
+  }
+
+  return out;
+}
+
+/** Timeline bucket: half-day slots aligned to Asia/Shanghai 00:00 and 12:00. */
+export async function availabilityAndTimeline(
+  db: D1Database,
+  monitorId: string
+): Promise<AvailabilityTimelineStats> {
+  const id = normMonitorId(monitorId);
+  const m = await availabilityAndTimelineBatch(db, [id]);
+  return m.get(id) ?? finalizeAvailabilityTimeline(null, null, null, [], null);
 }

@@ -68,6 +68,33 @@ function claudeUrl(base: string): string {
   return `${b}/v1/messages`;
 }
 
+/**
+ * Chat Completions 流式里 `choices[0].delta` 的正文抽取。
+ * 对齐 OpenAI 常见形态：delta.content 字符串；多段/多模态下为 part 数组；
+ * 部分国产/推理模型会在 delta.reasoning_content 等字段里先出字。
+ */
+function streamDeltaTextFromOpenAiChatChoice(delta: unknown): string {
+  if (delta == null || typeof delta !== "object") return "";
+  const d = delta as Record<string, unknown>;
+  const c = d.content;
+  if (typeof c === "string" && c !== "") return c;
+  if (Array.isArray(c)) {
+    let s = "";
+    for (const part of c) {
+      if (part && typeof part === "object") {
+        const p = part as { type?: string; text?: string };
+        if (typeof p.text === "string") s += p.text;
+      }
+    }
+    return s;
+  }
+  for (const k of ["reasoning_content", "reasoning"] as const) {
+    const v = d[k];
+    if (typeof v === "string" && v !== "") return v;
+  }
+  return "";
+}
+
 async function readStreamOpenAIChat(
   res: Response,
   started: number
@@ -96,12 +123,13 @@ async function readStreamOpenAIChat(
         }
         try {
           const obj = JSON.parse(payload) as {
-            choices?: Array<{ delta?: { content?: string } }>;
+            choices?: Array<{ delta?: unknown }>;
           };
-          const c = obj.choices?.[0]?.delta?.content;
-          if (c != null && c !== "") {
+          const delta = obj.choices?.[0]?.delta;
+          const chunk = streamDeltaTextFromOpenAiChatChoice(delta);
+          if (chunk !== "") {
             if (firstTokenMs == null) firstTokenMs = Math.max(0, Date.now() - started);
-            outputText = appendCap(outputText, c, STREAM_OUTPUT_CAP);
+            outputText = appendCap(outputText, chunk, STREAM_OUTPUT_CAP);
           }
         } catch {
           /* ignore bad json line */
@@ -153,6 +181,101 @@ async function readStreamOpenAIResponses(
     reader.releaseLock();
   }
   return { firstTokenMs, httpStatus: res.status, outputText };
+}
+
+function openAiChatMessageContentToText(content: unknown): string {
+  if (typeof content === "string") return content;
+  if (!Array.isArray(content)) return "";
+  let s = "";
+  for (const part of content) {
+    if (part && typeof part === "object") {
+      const p = part as { type?: string; text?: string };
+      if (typeof p.text === "string") s += p.text;
+    }
+  }
+  return s;
+}
+
+function parseOpenAiChatNonStream(
+  json: unknown,
+  started: number
+): { firstTokenMs: number | null; outputText: string } {
+  const obj = json as { choices?: Array<{ message?: { content?: unknown } }> };
+  const raw = openAiChatMessageContentToText(obj.choices?.[0]?.message?.content);
+  const outputText = raw.length <= STREAM_OUTPUT_CAP ? raw : raw.slice(0, STREAM_OUTPUT_CAP);
+  const firstTokenMs = outputText !== "" ? Math.max(0, Date.now() - started) : null;
+  return { firstTokenMs, outputText };
+}
+
+function extractOpenAiResponsesText(data: unknown): string {
+  if (data == null || typeof data !== "object") return "";
+  const d = data as Record<string, unknown>;
+  if (typeof d.output_text === "string") return d.output_text;
+
+  const out = d.output;
+  if (!Array.isArray(out)) return "";
+
+  const parts: string[] = [];
+  const walk = (node: unknown): void => {
+    if (node == null) return;
+    if (typeof node === "string") {
+      parts.push(node);
+      return;
+    }
+    if (Array.isArray(node)) {
+      for (const x of node) walk(x);
+      return;
+    }
+    if (typeof node !== "object") return;
+    const o = node as Record<string, unknown>;
+    if (o.type === "output_text" && typeof o.text === "string") {
+      parts.push(o.text);
+      return;
+    }
+    if (typeof o.text === "string" && typeof o.type === "string" && o.type.includes("text")) {
+      parts.push(o.text);
+      return;
+    }
+    if (o.content != null) walk(o.content);
+    if (o.output != null) walk(o.output);
+  };
+  for (const item of out) walk(item);
+  return parts.join("");
+}
+
+function parseOpenAiResponsesNonStream(
+  json: unknown,
+  started: number
+): { firstTokenMs: number | null; outputText: string } {
+  const raw = extractOpenAiResponsesText(json);
+  const outputText = raw.length <= STREAM_OUTPUT_CAP ? raw : raw.slice(0, STREAM_OUTPUT_CAP);
+  const firstTokenMs = outputText !== "" ? Math.max(0, Date.now() - started) : null;
+  return { firstTokenMs, outputText };
+}
+
+function extractClaudeNonStreamText(json: unknown): string {
+  if (json == null || typeof json !== "object") return "";
+  const d = json as { content?: unknown };
+  const content = d.content;
+  if (!Array.isArray(content)) return "";
+  let s = "";
+  for (const block of content) {
+    if (block && typeof block === "object") {
+      const b = block as { type?: string; text?: string };
+      if (b.type === "text" && typeof b.text === "string") s += b.text;
+    }
+  }
+  return s;
+}
+
+function parseClaudeNonStream(
+  json: unknown,
+  started: number
+): { firstTokenMs: number | null; outputText: string } {
+  const raw = extractClaudeNonStreamText(json);
+  const outputText = raw.length <= STREAM_OUTPUT_CAP ? raw : raw.slice(0, STREAM_OUTPUT_CAP);
+  const firstTokenMs = outputText !== "" ? Math.max(0, Date.now() - started) : null;
+  return { firstTokenMs, outputText };
 }
 
 /** 首字可来自正文或 thinking；输出只累计 assistant 可见正文 delta.text */
@@ -243,8 +366,11 @@ export async function runProbe(params: {
   model: string;
   protocol: Protocol;
   userMessage: string;
+  /** 默认 true（流式）；false 时使用非流式 JSON 响应 */
+  stream?: boolean;
 }): Promise<ProbeResult> {
   const userMessage = params.userMessage.trim() || "ping";
+  const useStream = params.stream !== false;
   const ac = new AbortController();
   const t = setTimeout(() => ac.abort(), PROBE_TIMEOUT_MS);
   const started = Date.now();
@@ -262,7 +388,7 @@ export async function runProbe(params: {
           model: params.model,
           messages: [{ role: "user", content: userMessage }],
           max_tokens: PROBE_MAX_TOKENS,
-          stream: true,
+          stream: useStream,
         }),
       });
       if (!res.ok) {
@@ -276,13 +402,38 @@ export async function runProbe(params: {
           responseText: null,
         };
       }
-      const { firstTokenMs, httpStatus, outputText } = await readStreamOpenAIChat(res, started);
+      if (useStream) {
+        const { firstTokenMs, httpStatus, outputText } = await readStreamOpenAIChat(res, started);
+        const ok = firstTokenMs != null;
+        return {
+          ok,
+          firstTokenMs,
+          httpStatus,
+          errorMessage: ok ? null : "no_stream_token",
+          requestMessage: userMessage,
+          responseText: outputText === "" ? null : outputText,
+        };
+      }
+      let json: unknown;
+      try {
+        json = await res.json();
+      } catch {
+        return {
+          ok: false,
+          firstTokenMs: null,
+          httpStatus: res.status,
+          errorMessage: "invalid_json_body",
+          requestMessage: userMessage,
+          responseText: null,
+        };
+      }
+      const { firstTokenMs, outputText } = parseOpenAiChatNonStream(json, started);
       const ok = firstTokenMs != null;
       return {
         ok,
         firstTokenMs,
-        httpStatus,
-        errorMessage: ok ? null : "no_stream_token",
+        httpStatus: res.status,
+        errorMessage: ok ? null : "no_response_content",
         requestMessage: userMessage,
         responseText: outputText === "" ? null : outputText,
       };
@@ -299,7 +450,7 @@ export async function runProbe(params: {
         body: JSON.stringify({
           model: params.model,
           input: userMessage,
-          stream: true,
+          stream: useStream,
         }),
       });
       if (!res.ok) {
@@ -313,13 +464,38 @@ export async function runProbe(params: {
           responseText: null,
         };
       }
-      const { firstTokenMs, httpStatus, outputText } = await readStreamOpenAIResponses(res, started);
+      if (useStream) {
+        const { firstTokenMs, httpStatus, outputText } = await readStreamOpenAIResponses(res, started);
+        const ok = firstTokenMs != null;
+        return {
+          ok,
+          firstTokenMs,
+          httpStatus,
+          errorMessage: ok ? null : "no_stream_token",
+          requestMessage: userMessage,
+          responseText: outputText === "" ? null : outputText,
+        };
+      }
+      let json: unknown;
+      try {
+        json = await res.json();
+      } catch {
+        return {
+          ok: false,
+          firstTokenMs: null,
+          httpStatus: res.status,
+          errorMessage: "invalid_json_body",
+          requestMessage: userMessage,
+          responseText: null,
+        };
+      }
+      const { firstTokenMs, outputText } = parseOpenAiResponsesNonStream(json, started);
       const ok = firstTokenMs != null;
       return {
         ok,
         firstTokenMs,
-        httpStatus,
-        errorMessage: ok ? null : "no_stream_token",
+        httpStatus: res.status,
+        errorMessage: ok ? null : "no_response_content",
         requestMessage: userMessage,
         responseText: outputText === "" ? null : outputText,
       };
@@ -337,7 +513,7 @@ export async function runProbe(params: {
         model: params.model,
         max_tokens: PROBE_MAX_TOKENS,
         messages: [{ role: "user", content: userMessage }],
-        stream: true,
+        stream: useStream,
       }),
     });
     if (!res.ok) {
@@ -351,13 +527,38 @@ export async function runProbe(params: {
         responseText: null,
       };
     }
-    const { firstTokenMs, httpStatus, outputText } = await readStreamClaude(res, started);
+    if (useStream) {
+      const { firstTokenMs, httpStatus, outputText } = await readStreamClaude(res, started);
+      const ok = firstTokenMs != null;
+      return {
+        ok,
+        firstTokenMs,
+        httpStatus,
+        errorMessage: ok ? null : "no_stream_token",
+        requestMessage: userMessage,
+        responseText: outputText === "" ? null : outputText,
+      };
+    }
+    let json: unknown;
+    try {
+      json = await res.json();
+    } catch {
+      return {
+        ok: false,
+        firstTokenMs: null,
+        httpStatus: res.status,
+        errorMessage: "invalid_json_body",
+        requestMessage: userMessage,
+        responseText: null,
+      };
+    }
+    const { firstTokenMs, outputText } = parseClaudeNonStream(json, started);
     const ok = firstTokenMs != null;
     return {
       ok,
       firstTokenMs,
-      httpStatus,
-      errorMessage: ok ? null : "no_stream_token",
+      httpStatus: res.status,
+      errorMessage: ok ? null : "no_response_content",
       requestMessage: userMessage,
       responseText: outputText === "" ? null : outputText,
     };

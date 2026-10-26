@@ -169,7 +169,7 @@ pnpm exec wrangler secret put ADMIN_TOKEN
 
 ## 备注
 
-- 探测 Cron 为每 5 分钟 `*/5 * * * *`，在 Worker 内根据 `next_run_at` 决定是否真正发起外呼；过期探测记录由每日独立 Cron 清理。
+- 探测 Cron 为每 5 分钟 `*/5 * * * *`，在 Worker 内根据 `next_run_at` 决定是否真正发起外呼；过期探测记录在每日 `03:00 UTC` 那次触发里顺带清理（Free 计划每账号仅 5 个 Cron 触发额度，故只保留一条）。
 - 探测使用 `stream: true`，以**首个内容增量**到达时间作为首字延迟。
 - Worker 脚本体积请保持精简；前端由 CDN 提供，整体符合常见 Workers 体积限制实践。
 

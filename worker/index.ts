@@ -55,7 +55,10 @@ app.use("/api/*", async (c, next) => {
 
 const ALLOWED = new Set([5, 10, 30, 60, 360]);
 const PROBE_CRON = "*/5 * * * *";
+/** 兼容旧的独立清理 Cron；新部署已合并到探测 Cron，在每日 03:00 UTC 那次触发里顺带清理。 */
 const PRUNE_CRON = "17 3 * * *";
+const PRUNE_UTC_HOUR = 3;
+const PRUNE_UTC_MINUTE = 0;
 
 function checkAdmin(c: { req: { header: (k: string) => string | undefined }; env: Env }): Response | null {
   const configured = (c.env.ADMIN_TOKEN ?? "").trim();
@@ -372,12 +375,19 @@ app.post("/api/admin/monitors/:id/run", async (c) => {
 export default {
   fetch: app.fetch,
   scheduled: (event: ScheduledEvent, env: Env, ctx: ExecutionContext) => {
+    // Free 计划每个账号仅允许 5 个 Cron 触发器，因此只保留一条 */5 触发：
+    // 每日 03:00 UTC 的那次触发顺带清理过期探测记录，其余触发只跑探测调度。
     if (event.cron === PRUNE_CRON) {
       ctx.waitUntil(pruneProbeEvents(env.DB));
       return;
     }
-    if (event.cron === PROBE_CRON) {
-      ctx.waitUntil(runScheduled(env));
+    if (event.cron !== PROBE_CRON && event.cron !== "* * * * *") {
+      return;
     }
+    const at = new Date(event.scheduledTime);
+    if (at.getUTCHours() === PRUNE_UTC_HOUR && at.getUTCMinutes() === PRUNE_UTC_MINUTE) {
+      ctx.waitUntil(pruneProbeEvents(env.DB));
+    }
+    ctx.waitUntil(runScheduled(env));
   },
 };

@@ -1,0 +1,20 @@
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.25rem 0.7rem;
+  border-radius: 999px;
+  border: 1px solid rgba(46, 204, 113, 0.35);
+  background: rgba(46, 204, 113, 0.1);
+  color: #1e6b3f;
+  font-size: 0.8rem;
+  white-space: nowrap;
+  cursor: help;
+}
+
+.dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--green);
+}

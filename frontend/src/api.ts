@@ -1,5 +1,5 @@
 import axios, { type AxiosResponse } from "axios";
-import type { GlobalProbeSettings, MonitorDto, MonitorProtocol } from "./types";
+import type { GlobalProbeSettings, MonitorDto, MonitorProtocol, WorkerLocation } from "./types";
 import { getAdminToken } from "./types";
 
 /** 与原 fetch 语义一致：任何 HTTP 状态都不抛错，由调用方按状态码处理；仅网络层失败才抛错。 */
@@ -38,6 +38,13 @@ function saveFailedMessage(r: AxiosResponse): string {
 export async function fetchMonitors(): Promise<MonitorDto[]> {
   const r = await http.get<MonitorDto[]>("/api/monitors", NO_STORE);
   if (!isOk(r)) throw new Error("failed_to_load");
+  return r.data;
+}
+
+/** 处理本次请求的 Cloudflare 数据中心；拿不到时返回 null，界面直接不显示。 */
+export async function fetchWorkerLocation(): Promise<WorkerLocation | null> {
+  const r = await http.get<WorkerLocation>("/api/location", NO_STORE);
+  if (!isOk(r) || !r.data?.colo) return null;
   return r.data;
 }
 

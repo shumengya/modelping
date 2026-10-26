@@ -1,4 +1,5 @@
 import { Hono } from "hono";
+import { COLO_TABLE } from "./colo";
 import {
   availabilityAndTimeline,
   availabilityAndTimelineBatch,
@@ -213,6 +214,18 @@ app.get("/api/monitors", async (c) => {
     /* 缓存不可用时仍返回实时数据 */
   }
   return response;
+});
+
+/** Workers 没有固定部署地，这里返回的是处理本次请求的 Cloudflare 数据中心；本地开发时 cf 可能为空 */
+app.get("/api/location", (c) => {
+  const cf = c.req.raw.cf as { colo?: string } | undefined;
+  const colo = (cf?.colo ?? "").toUpperCase();
+  const entry = colo ? COLO_TABLE[colo] : undefined;
+  return c.json({
+    colo: colo || null,
+    city: entry?.[0] ?? null,
+    country: entry?.[1] ?? null,
+  });
 });
 
 app.get("/api/monitors/:id", async (c) => {

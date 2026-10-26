@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Link, Outlet } from "react-router-dom";
 import { fetchRandBgJson } from "../api";
 import { BrandLogo } from "./BrandLogo";
+import { WorkerLocationBadge } from "./WorkerLocationBadge";
 import styles from "./Layout.module.css";
 
 const RANDBG_ORIGIN = "https://randbg.smyhub.com";
@@ -45,6 +46,7 @@ export function Layout() {
           <BrandLogo />
           <span className={styles.brandText}>ModelPing</span>
         </Link>
+        <WorkerLocationBadge />
       </header>
 
       <main className={styles.mainArea}>

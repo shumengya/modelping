@@ -40,6 +40,13 @@ export type GlobalProbeSettings = {
   probe_prompts: string;
 };
 
+/** /api/location：处理当前请求的 Cloudflare 数据中心 */
+export type WorkerLocation = {
+  colo: string | null;
+  city: string | null;
+  country: string | null;
+};
+
 export const ADMIN_TOKEN_KEY = "modelping_admin_token";
 
 export function getAdminToken(): string | null {

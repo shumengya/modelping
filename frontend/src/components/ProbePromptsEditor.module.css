@@ -6,7 +6,7 @@
 
 .head {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   justify-content: space-between;
   gap: 0.75rem;
 }
@@ -17,11 +17,10 @@
 }
 
 .count {
-  font-size: 0.8rem;
-  color: var(--green-dark);
-  background: rgba(46, 204, 113, 0.12);
-  border-radius: 999px;
-  padding: 0.1rem 0.6rem;
+  margin-left: 0.5rem;
+  font-weight: 400;
+  font-size: 0.85rem;
+  color: var(--muted);
 }
 
 .hint {
@@ -30,60 +29,70 @@
   color: var(--muted);
 }
 
-.textarea {
-  width: 100%;
-  min-height: 9rem;
-  padding: 0.65rem 0.8rem;
-  border-radius: 10px;
-  border: 1px solid rgba(15, 23, 42, 0.14);
-  background: #fafbfc;
-  font: inherit;
-  line-height: 1.7;
-  resize: vertical;
-  transition:
-    border-color 0.15s ease,
-    box-shadow 0.15s ease,
-    background-color 0.15s ease;
-}
-
-.textarea:focus {
-  outline: none;
-  background: #fff;
-  border-color: var(--green);
-  box-shadow: 0 0 0 3px rgba(46, 204, 113, 0.18);
-}
-
-/* 预览区过长时内部滚动，避免把保存按钮顶到屏幕外 */
-.preview {
-  max-height: 9.5rem;
-  overflow-y: auto;
-}
-
-.chips {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.4rem;
+/* 条目多时列表内部滚动，不把保存按钮挤出屏幕 */
+.list {
   margin: 0;
   padding: 0;
   list-style: none;
+  max-height: 18rem;
+  overflow-y: auto;
+  border-top: 1px solid rgba(15, 23, 42, 0.08);
 }
 
-.chip {
-  max-width: 100%;
-  padding: 0.2rem 0.7rem;
-  border-radius: 999px;
-  border: 1px solid rgba(46, 204, 113, 0.35);
-  background: rgba(46, 204, 113, 0.1);
-  color: #1e6b3f;
-  font-size: 0.85rem;
+.item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.4rem 0;
+  border-bottom: 1px solid rgba(15, 23, 42, 0.08);
+}
+
+.text {
+  min-width: 0;
   overflow-wrap: anywhere;
 }
 
 .empty {
   margin: 0;
-  padding: 0.6rem 0.8rem;
-  border-radius: 10px;
-  border: 1px dashed rgba(15, 23, 42, 0.2);
-  color: var(--muted);
+  padding: 0.5rem 0;
   font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.dialog-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.dialog-label {
+  font-size: 0.85rem;
+  color: #374151;
+}
+
+.input {
+  width: 100%;
+  padding: 0.5rem 0.65rem;
+  border-radius: 8px;
+  border: 1px solid rgba(15, 23, 42, 0.14);
+  font: inherit;
+}
+
+.input:focus {
+  outline: none;
+  border-color: var(--green);
+}
+
+.dialog-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+}
+
+/* 删除按钮靠左，和取消/保存拉开距离，避免误点 */
+.remove-btn {
+  margin-right: auto;
 }

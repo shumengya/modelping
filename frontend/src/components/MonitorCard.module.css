@@ -20,6 +20,13 @@
   gap: 0.55rem;
   align-items: flex-start;
   min-width: 0;
+  flex: 1 1 auto;
+}
+
+/* 标题与副信息列：占满右侧徽标之外的全部宽度，避免协议行过早折行 */
+.card-head-main {
+  min-width: 0;
+  flex: 1 1 auto;
 }
 
 .card-name {
@@ -51,14 +58,12 @@
   flex-direction: column;
   gap: 0.08rem;
   min-width: 0;
+  max-width: 100%;
 }
 
 .card-sub-protocol-path {
   color: #0f766e;
-  font-weight: 500;
-  font-size: 0.76rem;
-  line-height: 1.35;
-  word-break: break-word;
+  font-weight: 600;
 }
 
 .card-sub-meta-after,
@@ -77,6 +82,8 @@
 .card-sub-protocol {
   color: #0f766e;
   font-weight: 500;
+  font-size: 0.7rem;
+  line-height: 1.45;
 }
 
 .card-sub-meta {

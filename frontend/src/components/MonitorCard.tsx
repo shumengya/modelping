@@ -14,11 +14,22 @@ function protocolLabel(p: MonitorDto["protocol"]): string {
   return "OpenAI Chat Completions（/v1/chat/completions）";
 }
 
-/** 卡片上下两行：模型一行，协议一行 */
+/** 卡片里协议与端点写在同一排，例如「openai：/v1/chat/completions」 */
 function protocolCardLines(p: MonitorDto["protocol"]): { name: string; path: string } {
-  if (p === "claude") return { name: "Anthropic", path: "（/messages）" };
-  if (p === "openai_responses") return { name: "OpenAI Responses", path: "（/v1/responses）" };
-  return { name: "OpenAI Chat Completions", path: "（/v1/chat/completions）" };
+  if (p === "claude") return { name: "anthropic", path: "/messages" };
+  if (p === "openai_responses") return { name: "openai", path: "/v1/responses" };
+  return { name: "openai", path: "/v1/chat/completions" };
+}
+
+/** 在每段路径后插入换行机会，窄卡片上按 / 断行，而不是从单词中间切开 */
+function pathWithBreaks(path: string): ReactNode[] {
+  const segs = path.split("/").filter((s) => s.length > 0);
+  const nodes: ReactNode[] = [];
+  for (let i = 0; i < segs.length; i += 1) {
+    nodes.push(`/${segs[i]}`);
+    if (i < segs.length - 1) nodes.push(<wbr key={i} />);
+  }
+  return nodes;
 }
 
 function metricClass(accent?: string): string {
@@ -128,15 +139,17 @@ export function MonitorCard({ m, footerExtra }: { m: MonitorDto; footerExtra?: R
     <article className={styles.card}>
       <header className={styles.cardHead}>
         <div className={styles.cardTitleRow}>
-          <div>
+          <div className={styles.cardHeadMain}>
             <h2 className={styles.cardName}>{m.display_name}</h2>
             <div className={`${styles.cardSub} ${styles.cardSubStack}`}>
               <div className={styles.cardSubRowModel}>
                 <span className={styles.cardSubModel}>{m.model}</span>
               </div>
               <div className={styles.cardSubColProtocol}>
-                <span className={styles.cardSubProtocol}>{protoLines.name}</span>
-                <span className={styles.cardSubProtocolPath}>{protoLines.path}</span>
+                <span className={styles.cardSubProtocol}>
+                  {protoLines.name}：
+                  <span className={styles.cardSubProtocolPath}>{pathWithBreaks(protoLines.path)}</span>
+                </span>
                 {m.category?.trim() ? (
                   <span className={`${styles.cardSubMeta} ${styles.cardSubMetaAfter}`}>{m.category.trim()}</span>
                 ) : null}

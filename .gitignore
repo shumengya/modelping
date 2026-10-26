@@ -41,3 +41,6 @@ frontend/dist
 
 # 系统文件
 Thumbs.db
+
+# Playwright MCP 截图/快照
+.playwright-mcp/

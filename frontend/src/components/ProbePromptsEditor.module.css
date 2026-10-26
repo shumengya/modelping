@@ -1,0 +1,89 @@
+.editor {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.label {
+  font-weight: 600;
+  color: #1f2937;
+}
+
+.count {
+  font-size: 0.8rem;
+  color: var(--green-dark);
+  background: rgba(46, 204, 113, 0.12);
+  border-radius: 999px;
+  padding: 0.1rem 0.6rem;
+}
+
+.hint {
+  margin: 0;
+  font-size: 0.82rem;
+  color: var(--muted);
+}
+
+.textarea {
+  width: 100%;
+  min-height: 9rem;
+  padding: 0.65rem 0.8rem;
+  border-radius: 10px;
+  border: 1px solid rgba(15, 23, 42, 0.14);
+  background: #fafbfc;
+  font: inherit;
+  line-height: 1.7;
+  resize: vertical;
+  transition:
+    border-color 0.15s ease,
+    box-shadow 0.15s ease,
+    background-color 0.15s ease;
+}
+
+.textarea:focus {
+  outline: none;
+  background: #fff;
+  border-color: var(--green);
+  box-shadow: 0 0 0 3px rgba(46, 204, 113, 0.18);
+}
+
+/* 预览区过长时内部滚动，避免把保存按钮顶到屏幕外 */
+.preview {
+  max-height: 9.5rem;
+  overflow-y: auto;
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.chip {
+  max-width: 100%;
+  padding: 0.2rem 0.7rem;
+  border-radius: 999px;
+  border: 1px solid rgba(46, 204, 113, 0.35);
+  background: rgba(46, 204, 113, 0.1);
+  color: #1e6b3f;
+  font-size: 0.85rem;
+  overflow-wrap: anywhere;
+}
+
+.empty {
+  margin: 0;
+  padding: 0.6rem 0.8rem;
+  border-radius: 10px;
+  border: 1px dashed rgba(15, 23, 42, 0.2);
+  color: var(--muted);
+  font-size: 0.85rem;
+}

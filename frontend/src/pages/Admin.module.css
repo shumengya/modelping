@@ -82,3 +82,72 @@
   display: flex;
   justify-content: flex-end;
 }
+
+/* 全局设置：标题行 + 纵向排布的字段 */
+.global-head {
+  display: flex;
+  align-items: baseline;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.global-head h2 {
+  margin: 0;
+}
+
+.global-desc {
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.global-form {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.field-label {
+  font-weight: 600;
+  color: #1f2937;
+}
+
+.field-select {
+  width: min(16rem, 100%);
+  padding: 0.5rem 0.65rem;
+  border-radius: 10px;
+  border: 1px solid rgba(15, 23, 42, 0.14);
+  background: #fafbfc;
+  font: inherit;
+}
+
+.field-select:focus {
+  outline: none;
+  background: #fff;
+  border-color: var(--green);
+  box-shadow: 0 0 0 3px rgba(46, 204, 113, 0.18);
+}
+
+.field-hint {
+  margin: 0;
+  font-size: 0.82rem;
+  color: var(--muted);
+}
+
+.global-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.dirty-tip {
+  font-size: 0.85rem;
+  color: #b45309;
+}

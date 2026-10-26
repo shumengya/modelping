@@ -11,6 +11,7 @@ import {
   adminUpdateMonitor,
 } from "../api";
 import { MonitorCard } from "../components/MonitorCard";
+import { ProbePromptsEditor } from "../components/ProbePromptsEditor";
 import { useAppBoot } from "../context/useAppBoot";
 import {
   clearAdminToken,
@@ -26,6 +27,13 @@ import styles from "./Admin.module.css";
 const INTERVALS = [5, 10, 30, 60, 360] as const;
 /** 管理页与首页一致：拉取最新监控与统计数据 */
 const ADMIN_REFRESH_MS = 60_000;
+
+type GlobalForm = {
+  probe_interval_minutes: (typeof INTERVALS)[number];
+  probe_prompts: string;
+};
+
+const EMPTY_GLOBAL: GlobalForm = { probe_interval_minutes: 5, probe_prompts: "" };
 
 const EMPTY_FORM = {
   display_name: "",
@@ -57,10 +65,13 @@ export function Admin() {
   const refreshInFlightRef = useRef<Promise<void> | null>(null);
 
   const [rows, setRows] = useState<Row[] | null>(null);
-  const [globalForm, setGlobalForm] = useState({
-    probe_interval_minutes: 5 as (typeof INTERVALS)[number],
-    probe_prompts: "",
-  });
+  const [globalForm, setGlobalForm] = useState<GlobalForm>(EMPTY_GLOBAL);
+  /** 服务端上一次的全局设置，用来判断表单有没有未保存的修改 */
+  const [savedGlobal, setSavedGlobal] = useState<GlobalForm>(EMPTY_GLOBAL);
+  const globalDirty =
+    globalForm.probe_interval_minutes !== savedGlobal.probe_interval_minutes ||
+    globalForm.probe_prompts !== savedGlobal.probe_prompts;
+  const globalDirtyRef = useRef(false);
   const [msg, setMsg] = useState<string | null>(null);
   const [editing, setEditing] = useState<Row | null>(null);
   const monitorFormDlgRef = useRef<HTMLDialogElement>(null);
@@ -76,10 +87,13 @@ export function Admin() {
     const request = Promise.all([adminListMonitors(), adminGetProbeSettings()])
       .then(([list, g]) => {
         setRows(list);
-        setGlobalForm({
+        const server: GlobalForm = {
           probe_interval_minutes: g.probe_interval_minutes as (typeof INTERVALS)[number],
           probe_prompts: g.probe_prompts,
-        });
+        };
+        setSavedGlobal(server);
+        // 每分钟的自动刷新不能覆盖用户正在编辑、还没保存的内容
+        if (!globalDirtyRef.current) setGlobalForm(server);
         setMsg(null);
       })
       .catch(() => setMsg("加载失败，请重新使用带 token 的链接登录"))
@@ -94,6 +108,7 @@ export function Admin() {
 
   useEffect(() => {
     refreshAllRef.current = refreshAll;
+    globalDirtyRef.current = globalDirty;
   });
 
   useEffect(() => {
@@ -172,6 +187,7 @@ export function Admin() {
         probe_interval_minutes: globalForm.probe_interval_minutes,
         probe_prompts: globalForm.probe_prompts,
       });
+      setSavedGlobal(globalForm);
       refreshAll();
       setMsg("全局设置已保存（对所有监控生效）");
     } catch (err) {
@@ -273,11 +289,18 @@ export function Admin() {
       {msg ? <p className={common.banner}>{msg}</p> : null}
 
       <section className={styles.adminFormSection}>
-        <h2>全局设置</h2>
-        <form className={styles.adminForm} onSubmit={saveGlobal}>
-          <label>
-            探测间隔
+        <header className={styles.globalHead}>
+          <h2>全局设置</h2>
+          <p className={styles.globalDesc}>对所有监控生效</p>
+        </header>
+        <form className={styles.globalForm} onSubmit={saveGlobal}>
+          <div className={styles.field}>
+            <label className={styles.fieldLabel} htmlFor="global-interval">
+              探测间隔
+            </label>
             <select
+              id="global-interval"
+              className={styles.fieldSelect}
               value={globalForm.probe_interval_minutes}
               onChange={(e) =>
                 setGlobalForm((f) => ({
@@ -292,18 +315,17 @@ export function Admin() {
                 </option>
               ))}
             </select>
-          </label>
-          <label>
-            探测用语
-            <textarea
-              rows={4}
-              placeholder={"你好\nhello\nping"}
-              value={globalForm.probe_prompts}
-              onChange={(e) => setGlobalForm((f) => ({ ...f, probe_prompts: e.target.value }))}
-            />
-          </label>
-          <div className={styles.formActions}>
-            <button type="submit" className={`${common.btn} ${common.primary}`}>
+            <p className={styles.fieldHint}>Cron 每 5 分钟触发一次，所以实际探测的时间粒度最小为 5 分钟。</p>
+          </div>
+
+          <ProbePromptsEditor
+            value={globalForm.probe_prompts}
+            onChange={(next) => setGlobalForm((f) => ({ ...f, probe_prompts: next }))}
+          />
+
+          <div className={styles.globalFooter}>
+            {globalDirty ? <span className={styles.dirtyTip}>有未保存的修改</span> : <span />}
+            <button type="submit" className={`${common.btn} ${common.primary}`} disabled={!globalDirty}>
               保存全局设置
             </button>
           </div>

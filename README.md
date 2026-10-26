@@ -64,6 +64,64 @@ pnpm run deploy
 
 等价于 `tsc -b && vite build && wrangler deploy`。Wrangler 会使用重定向后的 `dist/modelping/wrangler.json` 上传 Worker 与 `dist/client` 静态资源。
 
+## 连接 Cloudflare 自动部署（Workers Builds）
+
+`git push` 后由 Cloudflare 自动构建并部署。**注意：Workers Builds 只支持 GitHub / GitLab，不支持自建 Gitea**，所以请连接 GitHub 仓库（如 `shumengya/modelping`）。
+
+### 1. 在 Dashboard 建立连接
+
+已有 Worker：`Workers & Pages` → 选中 `modelping` → `Settings` → `Builds` → `Connect`。
+新建 Worker：`Workers & Pages` → `Create application` → `Import a repository`。
+
+首次连接需授权 Cloudflare 的 GitHub App，只勾选本仓库即可。
+
+### 2. 构建设置
+
+| 设置项 | 值 |
+|--------|-----|
+| Production branch | `main` |
+| Root directory | `.` |
+| Build command | `pnpm run build` |
+| Deploy command | `npx wrangler deploy`（默认值即可） |
+| Preview / 非生产分支 | 默认 `npx wrangler preview`；暂无独立 D1 预览库时建议关闭非生产分支构建 |
+
+说明：`vite build` 经 `@cloudflare/vite-plugin` 生成 `dist/modelping/wrangler.json` 与 `.wrangler/deploy/config.json`，因此 `wrangler deploy` 会自动重定向到构建产物配置，**不需要**手写 `--config`。Worker 名称必须与 `wrangler.json` 的 `name`（`modelping`）一致。
+
+依赖安装由 Workers Builds 自动完成：识别 `pnpm-lock.yaml`，并按 `packageManager` 字段安装 `pnpm@11.21.0`；Node 版本由 [`.node-version`](.node-version) 固定为 `24.21.0`（构建镜像自带）。
+
+### 3. 运行时密钥（只需设置一次）
+
+```bash
+pnpm exec wrangler secret put ADMIN_TOKEN
+pnpm exec wrangler secret put ENCRYPTION_KEY   # 可选
+```
+
+Workers Builds 设置里的 `Build variables and secrets` 只对构建过程可见，**不会**注入运行时；`.dev.vars` 也不会随仓库上传。Secret 归 Worker 所有，自动部署不会覆盖它。
+
+### 4. D1 迁移不会自动执行
+
+改了 `migrations/*.sql` 后，需在本地对远程库执行一次：
+
+```bash
+pnpm run db:migrate:remote
+```
+
+若希望构建阶段顺带迁移，把 Deploy command 改成：
+
+```bash
+pnpm exec wrangler d1 migrations apply DB --remote && npx wrangler deploy
+```
+
+非交互环境下 Wrangler 会跳过确认并自动备份。但 Workers Builds 自动创建的 API Token 默认不含 D1 权限，需到 `My Profile` → `API Tokens` 自建一个包含 **D1: Edit** 的 Token，并在 `Settings → Builds → API token` 中选用。
+
+### 5. 验证
+
+推送后进入 Worker 的 `Deployments` → `View build history` 查看日志；成功后可访问 `*.workers.dev` 或自定义域名。构建失败时优先看：Worker 名称是否匹配、`pnpm-lock.yaml` 是否提交、Secret 是否已设置。
+
+### 可选：改用 GitHub Actions
+
+若不想用 Workers Builds，也可在 GitHub 侧用 `cloudflare/wrangler-action` 部署（需在仓库 Secrets 配置 `CLOUDFLARE_API_TOKEN` 与 `CLOUDFLARE_ACCOUNT_ID`），命令为 `pnpm install --frozen-lockfile && pnpm run build` 后执行 `wrangler deploy`。两条链路不要同时启用，避免重复部署。
+
 ## 出现「服务端未配置 ADMIN_TOKEN」（503）怎么修
 
 含义：当前运行的 Worker **读不到** `ADMIN_TOKEN`（既不是 Secret，本地也没从 `.dev.vars` 注入）。

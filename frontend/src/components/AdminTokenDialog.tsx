@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { adminPing } from "../api";
 import { setAdminToken } from "../types";
+import common from "../styles/common.module.css";
+import styles from "./AdminTokenDialog.module.css";
 
 type Props = {
   onClose: () => void;
@@ -60,17 +62,17 @@ export function AdminTokenDialog({ onClose, onSuccess }: Props) {
 
   return (
     <div
-      className="modal-backdrop admin-token-backdrop"
+      className={`${styles.modalBackdrop} ${styles.adminTokenBackdrop}`}
       role="presentation"
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
     >
-      <form className="modal admin-token-modal" onSubmit={(e) => void submit(e)} onClick={(e) => e.stopPropagation()}>
-        <p className="modal-title admin-token-title">管理 Token</p>
+      <form className={`${styles.modal} ${styles.adminTokenModal}`} onSubmit={(e) => void submit(e)} onClick={(e) => e.stopPropagation()}>
+        <p className={`${styles.modalTitle} ${styles.adminTokenTitle}`}>管理 Token</p>
         <input
           ref={inputRef}
-          className="modal-input admin-token-input"
+          className={`${styles.modalInput} ${styles.adminTokenInput}`}
           type="password"
           value={token}
           onChange={(e) => setToken(e.target.value)}
@@ -78,12 +80,12 @@ export function AdminTokenDialog({ onClose, onSuccess }: Props) {
           autoComplete="off"
           disabled={busy}
         />
-        {err ? <p className="modal-err">{err}</p> : null}
-        <div className="modal-actions">
-          <button type="button" className="btn ghost small" onClick={onClose} disabled={busy}>
+        {err ? <p className={styles.modalErr}>{err}</p> : null}
+        <div className={styles.modalActions}>
+          <button type="button" className={`${common.btn} ${common.ghost} ${common.small}`} onClick={onClose} disabled={busy}>
             取消
           </button>
-          <button type="submit" className="btn primary small" disabled={busy}>
+          <button type="submit" className={`${common.btn} ${common.primary} ${common.small}`} disabled={busy}>
             {busy ? "校验中…" : "进入"}
           </button>
         </div>

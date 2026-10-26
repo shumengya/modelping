@@ -1,0 +1,60 @@
+.probe-detail-dialog {
+  max-width: min(520px, 94vw);
+  width: 100%;
+  margin: auto;
+  border: none;
+  border-radius: 16px;
+  padding: 0;
+  box-shadow: 0 20px 50px rgba(15, 23, 42, 0.22);
+}
+
+.probe-detail-dialog::backdrop {
+  background: rgba(15, 23, 42, 0.4);
+}
+
+.probe-detail-inner {
+  padding: 1rem 1.15rem 1.15rem;
+}
+
+.probe-detail-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 0.75rem;
+}
+
+.probe-detail-title {
+  margin: 0;
+  font-size: 1.05rem;
+}
+
+.probe-detail-close {
+  border: none;
+  background: #f1f5f9;
+  width: 2rem;
+  height: 2rem;
+  border-radius: 8px;
+  font-size: 1.35rem;
+  line-height: 1;
+  cursor: pointer;
+  color: #64748b;
+  display: grid;
+  place-items: center;
+  padding: 0;
+}
+
+.probe-detail-close:hover {
+  background: #e2e8f0;
+}
+
+.admin-monitor-dialog {
+  max-width: min(720px, 96vw);
+}
+
+.admin-monitor-dialog-inner {
+  max-height: min(88vh, 900px);
+  display: flex;
+  flex-direction: column;
+  padding-bottom: 1rem;
+}

@@ -306,12 +306,19 @@ export function normMonitorId(id: unknown): string {
   return String(id ?? "").trim();
 }
 
-/** 每个监控单独 batch（5 条语句），多监控并发；避免单次 mega-batch 下结果与语句顺序偶发错位 */
-const AV_STATS_PARALLEL_MONITORS = 12;
+const AV_STATS_MONITOR_CHUNK_SIZE = 100;
 
-/**
- * 批量拉取多个监控的可用率与时间线（每位监控 1 次 `db.batch`，含 5 条 SELECT）。
- */
+type AvailabilitySummaryRow = {
+  monitor_id: unknown;
+  ok24: number | null;
+  total24: number | null;
+  ok30: number | null;
+  total30: number | null;
+};
+
+type LastProbeQueryRow = LastProbeRow & { monitor_id: unknown };
+
+/** 分块聚合多个监控的可用率与时间线，避免每个监控重复扫描探测记录。 */
 export async function availabilityAndTimelineBatch(
   db: D1Database,
   monitorIds: string[]
@@ -324,36 +331,75 @@ export async function availabilityAndTimelineBatch(
   const start24 = now - 86400;
   const start30 = now - THIRTY_DAYS_SEC;
 
-  const sqlLast = `SELECT ts, ok, first_token_ms, http_status, error_message, probe_input, probe_output FROM probe_events WHERE monitor_id = ? ORDER BY ts DESC LIMIT 1`;
-  const sqlRange = `SELECT SUM(ok) AS okc, COUNT(*) AS total FROM probe_events WHERE monitor_id = ? AND ts >= ?`;
-  const sqlDaily = `SELECT (CAST((ts + 28800) / 43200 AS INTEGER) * 43200 - 28800) AS day_start,
-              SUM(ok) AS okc,
-              COUNT(*) AS cnt
-       FROM probe_events WHERE monitor_id = ? AND ts >= ?
-       GROUP BY day_start ORDER BY day_start ASC`;
-  const sqlCount = `SELECT COUNT(*) AS c FROM probe_events WHERE monitor_id = ?`;
-
-  async function fetchOne(monitorId: string): Promise<void> {
-    const batchResults = await db.batch([
-      db.prepare(sqlLast).bind(monitorId),
-      db.prepare(sqlRange).bind(monitorId, start24),
-      db.prepare(sqlRange).bind(monitorId, start30),
-      db.prepare(sqlDaily).bind(monitorId, start30),
-      db.prepare(sqlCount).bind(monitorId),
+  for (let off = 0; off < unique.length; off += AV_STATS_MONITOR_CHUNK_SIZE) {
+    const ids = unique.slice(off, off + AV_STATS_MONITOR_CHUNK_SIZE);
+    const placeholders = ids.map(() => "?").join(", ");
+    const lastProbeSql = `
+      SELECT monitor_id, ts, ok, first_token_ms, http_status, error_message, probe_input, probe_output
+      FROM (
+        SELECT monitor_id, ts, ok, first_token_ms, http_status, error_message, probe_input, probe_output,
+               ROW_NUMBER() OVER (PARTITION BY monitor_id ORDER BY ts DESC, id DESC) AS row_number
+        FROM probe_events
+        WHERE monitor_id IN (${placeholders})
+      )
+      WHERE row_number = 1`;
+    const summarySql = `
+      SELECT monitor_id,
+             SUM(CASE WHEN ts >= ? THEN ok ELSE 0 END) AS ok24,
+             SUM(CASE WHEN ts >= ? THEN 1 ELSE 0 END) AS total24,
+             SUM(ok) AS ok30,
+             COUNT(*) AS total30
+      FROM probe_events
+      WHERE monitor_id IN (${placeholders}) AND ts >= ?
+      GROUP BY monitor_id`;
+    const dailySql = `
+      SELECT monitor_id,
+             (CAST((ts + 28800) / 43200 AS INTEGER) * 43200 - 28800) AS day_start,
+             SUM(ok) AS okc,
+             COUNT(*) AS cnt
+      FROM probe_events
+      WHERE monitor_id IN (${placeholders}) AND ts >= ?
+      GROUP BY monitor_id, day_start
+      ORDER BY monitor_id ASC, day_start ASC`;
+    const [lastProbeResult, summaryResult, dailyResult] = await db.batch([
+      db.prepare(lastProbeSql).bind(...ids),
+      db.prepare(summarySql).bind(start24, start24, ...ids, start30),
+      db.prepare(dailySql).bind(...ids, start30),
     ]);
+    const lastProbeByMonitor = new Map<string, LastProbeRow>();
+    const dailyByMonitor = new Map<string, unknown[]>();
 
-    const lastProbe = batchResults[0].results?.[0] as LastProbeRow | undefined;
-    const stats24 = batchResults[1].results?.[0] as { okc: number | null; total: number | null } | undefined;
-    const stats30 = batchResults[2].results?.[0] as { okc: number | null; total: number | null } | undefined;
-    const dailyRaw = batchResults[3].results ?? [];
-    const countRow = batchResults[4].results?.[0] as { c: number | null } | undefined;
+    for (const row of lastProbeResult.results ?? []) {
+      const lastProbe = row as LastProbeQueryRow;
+      lastProbeByMonitor.set(normMonitorId(lastProbe.monitor_id), lastProbe);
+    }
 
-    out.set(monitorId, finalizeAvailabilityTimeline(lastProbe, stats24, stats30, dailyRaw, countRow));
-  }
+    for (const row of dailyResult.results ?? []) {
+      const monitorId = normMonitorId((row as { monitor_id: unknown }).monitor_id);
+      const rows = dailyByMonitor.get(monitorId) ?? [];
+      rows.push(row);
+      dailyByMonitor.set(monitorId, rows);
+    }
 
-  for (let off = 0; off < unique.length; off += AV_STATS_PARALLEL_MONITORS) {
-    const slice = unique.slice(off, off + AV_STATS_PARALLEL_MONITORS);
-    await Promise.all(slice.map((id) => fetchOne(id)));
+    for (const monitorId of ids) {
+      out.set(monitorId, finalizeAvailabilityTimeline(null, null, null, dailyByMonitor.get(monitorId) ?? [], null));
+    }
+
+    for (const row of summaryResult.results ?? []) {
+      const summary = row as AvailabilitySummaryRow;
+      const monitorId = normMonitorId(summary.monitor_id);
+      const lastProbe = lastProbeByMonitor.get(monitorId) ?? null;
+      out.set(
+        monitorId,
+        finalizeAvailabilityTimeline(
+          lastProbe,
+          { okc: summary.ok24, total: summary.total24 },
+          { okc: summary.ok30, total: summary.total30 },
+          dailyByMonitor.get(monitorId) ?? [],
+          { c: summary.total30 }
+        )
+      );
+    }
   }
 
   return out;

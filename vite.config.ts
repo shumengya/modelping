@@ -15,6 +15,11 @@ export default defineConfig({
     outDir: path.resolve(projRoot, 'dist/client'),
     emptyOutDir: true,
   },
+  css: {
+    modules: {
+      localsConvention: 'camelCaseOnly',
+    },
+  },
   plugins: [
     react(),
     VitePWA({

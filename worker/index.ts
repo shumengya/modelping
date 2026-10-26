@@ -6,6 +6,7 @@ import {
   getMonitor,
   listMonitorsPublic,
   normMonitorId,
+  pruneProbeEvents,
   updateAppSettings,
 } from "./db";
 import {
@@ -44,13 +45,17 @@ function parseOptionalProbeStream(o: Record<string, unknown>): boolean | undefin
 
 const app = new Hono<{ Bindings: Env }>();
 
-/** 避免边缘/浏览器把动态 JSON 缓存成「半套字段」，尤其带 Authorization 的请求易被错误复用 */
+/** 管理与详情接口保持私有；公开列表由路由显式配置短时共享缓存。 */
 app.use("/api/*", async (c, next) => {
-  c.header("Cache-Control", "private, no-store, max-age=0");
   await next();
+  if (c.req.path !== "/api/monitors") {
+    c.header("Cache-Control", "private, no-store, max-age=0");
+  }
 });
 
-const ALLOWED = new Set([1, 5, 10, 30, 60, 360]);
+const ALLOWED = new Set([5, 10, 30, 60, 360]);
+const PROBE_CRON = "*/5 * * * *";
+const PRUNE_CRON = "17 3 * * *";
 
 function checkAdmin(c: { req: { header: (k: string) => string | undefined }; env: Env }): Response | null {
   const configured = (c.env.ADMIN_TOKEN ?? "").trim();
@@ -170,14 +175,41 @@ async function monitorsDtoList(db: D1Database, merged: MonitorRowWithInterval[])
   });
 }
 
+function publicMonitorsCacheKey(requestUrl: string): Request {
+  return new Request(new URL("/_cache/public-monitors-v1", requestUrl).toString());
+}
+
+async function purgePublicMonitorsCache(requestUrl: string): Promise<void> {
+  try {
+    await caches.default.delete(publicMonitorsCacheKey(requestUrl));
+  } catch {
+    /* 缓存不可用时等待最多 60 秒自然过期 */
+  }
+}
+
 app.get("/api/monitors", async (c) => {
+  const cacheKey = publicMonitorsCacheKey(c.req.url);
+  const cached = await caches.default.match(cacheKey);
+  if (cached) return cached;
+
   const db = c.env.DB;
   const [rows, s] = await Promise.all([listMonitorsPublic(db, "dashboard"), getAppSettings(db)]);
   const merged: MonitorRowWithInterval[] = rows.map((m) => ({
     ...m,
     interval_minutes: s.probe_interval_minutes,
   }));
-  return c.json(await monitorsDtoList(db, merged));
+  const response = new Response(JSON.stringify(await monitorsDtoList(db, merged)), {
+    headers: {
+      "Cache-Control": "public, max-age=60, s-maxage=60",
+      "Content-Type": "application/json",
+    },
+  });
+  try {
+    await caches.default.put(cacheKey, response.clone());
+  } catch {
+    /* 缓存不可用时仍返回实时数据 */
+  }
+  return response;
 });
 
 app.get("/api/monitors/:id", async (c) => {
@@ -246,6 +278,7 @@ app.put("/api/admin/probe-settings", async (c) => {
   if (Object.keys(patch).length === 0) return c.json({ error: "invalid_body" }, 400);
   try {
     await updateAppSettings(c.env.DB, patch);
+    await purgePublicMonitorsCache(c.req.url);
     return c.json({ ok: true });
   } catch (e) {
     const message = e instanceof Error ? e.message : String(e);
@@ -271,6 +304,7 @@ app.post("/api/admin/monitors", async (c) => {
   const parsed = await parseMonitorCreate(c);
   if (!parsed) return c.json({ error: "invalid_body" }, 400);
   const { id } = await createMonitorFromPayload(c.env, c.env.DB, parsed);
+  await purgePublicMonitorsCache(c.req.url);
   return c.json({ id }, 201);
 });
 
@@ -301,6 +335,7 @@ app.put("/api/admin/monitors/:id", async (c) => {
   try {
     const ok = await updateMonitorFromPayload(c.env, c.env.DB, id, patch);
     if (!ok) return c.json({ error: "not_found" }, 404);
+    await purgePublicMonitorsCache(c.req.url);
     return c.json({ ok: true });
   } catch (e) {
     const message = e instanceof Error ? e.message : String(e);
@@ -315,6 +350,7 @@ app.delete("/api/admin/monitors/:id", async (c) => {
   const m = await getMonitor(c.env.DB, id);
   if (!m) return c.json({ error: "not_found" }, 404);
   await deleteMonitor(c.env.DB, id);
+  await purgePublicMonitorsCache(c.req.url);
   return c.json({ ok: true });
 });
 
@@ -325,7 +361,8 @@ app.post("/api/admin/monitors/:id/run", async (c) => {
   const m = await getMonitor(c.env.DB, id);
   if (!m) return c.json({ error: "not_found" }, 404);
   const nowSec = Math.floor(Date.now() / 1000);
-  const outcome = await runSingleProbe(c.env, id, c.env.DB, nowSec);
+  const outcome = await runSingleProbe(c.env, id, c.env.DB, nowSec, { monitor: m });
+  await purgePublicMonitorsCache(c.req.url);
   if (!outcome.success) {
     return c.json({ ok: false, error: outcome.error }, 200);
   }
@@ -334,7 +371,13 @@ app.post("/api/admin/monitors/:id/run", async (c) => {
 
 export default {
   fetch: app.fetch,
-  scheduled: (_event: ScheduledEvent, env: Env, ctx: ExecutionContext) => {
-    ctx.waitUntil(runScheduled(env));
+  scheduled: (event: ScheduledEvent, env: Env, ctx: ExecutionContext) => {
+    if (event.cron === PRUNE_CRON) {
+      ctx.waitUntil(pruneProbeEvents(env.DB));
+      return;
+    }
+    if (event.cron === PROBE_CRON) {
+      ctx.waitUntil(runScheduled(env));
+    }
   },
 };

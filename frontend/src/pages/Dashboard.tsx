@@ -1,8 +1,10 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { fetchMonitors } from "../api";
 import { MonitorCard } from "../components/MonitorCard";
-import { useAppBoot } from "../context/AppBootContext";
+import { useAppBoot } from "../context/useAppBoot";
 import type { MonitorDto } from "../types";
+import common from "../styles/common.module.css";
+import styles from "./Dashboard.module.css";
 
 const REFRESH_MS = 60_000;
 
@@ -12,22 +14,26 @@ export function Dashboard() {
   const [err, setErr] = useState<string | null>(null);
   const [filterCat, setFilterCat] = useState<string>("__all__");
   const [q, setQ] = useState("");
+  const loadingRef = useRef(false);
 
-  const load = useCallback(() => {
-    fetchMonitors()
-      .then((data) => {
-        setRows(data);
-        setErr(null);
-      })
-      .catch(() => {
-        setRows([]);
-        setErr("加载失败");
-      });
+  const load = useCallback(async () => {
+    if (document.visibilityState !== "visible" || loadingRef.current) return;
+    loadingRef.current = true;
+    try {
+      const data = await fetchMonitors();
+      setRows(data);
+      setErr(null);
+    } catch {
+      setRows([]);
+      setErr("加载失败");
+    } finally {
+      loadingRef.current = false;
+    }
   }, []);
 
   useEffect(() => {
-    load();
-    const t = setInterval(load, REFRESH_MS);
+    queueMicrotask(() => void load());
+    const t = setInterval(() => void load(), REFRESH_MS);
     const onVis = () => {
       if (document.visibilityState === "visible") load();
     };
@@ -69,39 +75,39 @@ export function Dashboard() {
   const offline = (rows ?? []).filter((m) => m.lastProbe && m.lastProbe.ok !== 1).length;
 
   return (
-    <div className="page dashboard">
-      <section className="panel-intro">
-        <div className="status-line">
-          <span className="dot ok" />
+    <div className={common.page}>
+      <section className={styles.panelIntro}>
+        <div className={styles.statusLine}>
+          <span className={`${styles.dot} ${styles.ok}`} />
           <span>
-            {online} 在线 | <span className="muted">{offline} 离线</span>
+            {online} 在线 | <span className={common.muted}>{offline} 离线</span>
           </span>
         </div>
-        <div className="toolbar">
-          <div className="pills">
+        <div className={styles.toolbar}>
+          <div className={styles.pills}>
             {categories.map((c) => (
               <button
                 key={c}
                 type="button"
-                className={`pill ${filterCat === c ? "active" : ""}`}
+                className={filterCat === c ? `${styles.pill} ${styles.active}` : styles.pill}
                 onClick={() => setFilterCat(c)}
               >
                 {c === "__all__" ? "全部" : c}
               </button>
             ))}
           </div>
-          <label className="search">
-            <span className="sr-only">搜索</span>
+          <label className={styles.search}>
+            <span className={common.srOnly}>搜索</span>
             <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="搜索名称、模型或地址…" />
           </label>
         </div>
       </section>
 
-      {err ? <p className="banner error">{err}</p> : null}
+      {err ? <p className={`${common.banner} ${common.error}`}>{err}</p> : null}
 
-      {rows?.length === 0 ? <p className="muted">暂无监控项。请从管理入口添加。</p> : null}
+      {rows?.length === 0 ? <p className={common.muted}>暂无监控项。请从管理入口添加。</p> : null}
 
-      <div className="card-grid">
+      <div className={common.cardGrid}>
         {filtered.map((m) => (
           <MonitorCard key={m.id} m={m} />
         ))}

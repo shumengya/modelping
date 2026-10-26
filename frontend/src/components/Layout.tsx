@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
 import { Link, Outlet } from "react-router-dom";
+import { fetchRandBgJson } from "../api";
 import { BrandLogo } from "./BrandLogo";
+import styles from "./Layout.module.css";
 
 const RANDBG_ORIGIN = "https://randbg.smyhub.com";
 const RANDBG_RANDOM_JSON = `${RANDBG_ORIGIN}/api/random?format=json&mode=desktop`;
@@ -16,10 +18,7 @@ export function Layout() {
     let cancelled = false;
     (async () => {
       try {
-        const r = await fetch(RANDBG_RANDOM_JSON, { cache: "no-store" });
-        if (!r.ok) throw new Error("randbg_status");
-        const data = (await r.json()) as { url?: string };
-        const u = typeof data.url === "string" ? data.url.trim() : "";
+        const u = await fetchRandBgJson(RANDBG_RANDOM_JSON);
         if (!cancelled && u) {
           setBgUrl(resolveRandBgUrl(u));
           return;
@@ -37,18 +36,18 @@ export function Layout() {
   }, []);
 
   return (
-    <div className="app-shell">
+    <div className={styles.appShell}>
       {bgUrl ? (
-        <img className="app-rand-bg" src={bgUrl} alt="" decoding="async" fetchPriority="low" />
+        <img className={styles.appRandBg} src={bgUrl} alt="" decoding="async" fetchPriority="low" />
       ) : null}
-      <header className="topbar">
-        <Link to="/" className="brand" title="ModelPing">
+      <header className={styles.topbar}>
+        <Link to="/" className={styles.brand} title="ModelPing">
           <BrandLogo />
-          <span className="brand-text">ModelPing</span>
+          <span className={styles.brandText}>ModelPing</span>
         </Link>
       </header>
 
-      <main className="main-area">
+      <main className={styles.mainArea}>
         <Outlet />
       </main>
     </div>

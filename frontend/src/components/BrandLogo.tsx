@@ -1,6 +1,7 @@
 import { useRef, useState, type PointerEvent } from "react";
 import { useNavigate } from "react-router-dom";
 import { AdminTokenDialog } from "./AdminTokenDialog";
+import styles from "./BrandLogo.module.css";
 
 const LOGO_CLICKS = 5;
 const LOGO_CLICK_WINDOW_MS = 2000;
@@ -30,7 +31,7 @@ export function BrandLogo() {
   return (
     <>
       <img
-        className="brand-logo"
+        className={styles.brandLogo}
         src="/logo.png"
         alt=""
         width={40}

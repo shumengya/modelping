@@ -1,0 +1,87 @@
+.app-shell {
+  position: relative;
+  isolation: isolate;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+/* https://randbg.smyhub.com — 全站随机底图，轻微缩放避免模糊露边 */
+.app-rand-bg {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  pointer-events: none;
+  user-select: none;
+  filter: blur(var(--rand-bg-blur));
+  transform: scale(var(--rand-bg-scale));
+  transform-origin: center center;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .app-rand-bg {
+    filter: none;
+    transform: none;
+    }
+}
+
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.75rem 1.25rem;
+  background: rgba(255, 255, 255, 0.92);
+  backdrop-filter: blur(8px);
+  border-bottom: 1px solid rgba(15, 23, 42, 0.06);
+  position: sticky;
+  top: 0;
+  z-index: 20;
+}
+
+a.brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  text-decoration: none;
+  color: inherit;
+  padding: 0.35rem 0.5rem;
+  margin: 0;
+  border-radius: 10px;
+  cursor: pointer;
+  font: inherit;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
+a.brand:hover {
+  text-decoration: none;
+}
+
+a.brand:focus-visible {
+  outline: 2px solid var(--green);
+  outline-offset: 2px;
+}
+
+.brand-text {
+  font-weight: 700;
+  font-size: 1.1rem;
+}
+
+.main-area {
+  flex: 1;
+  padding: 1.25rem;
+  max-width: 1280px;
+  margin: 0 auto;
+  width: 100%;
+}
+
+@media (max-width: 640px) {
+  .topbar {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.5rem;
+    }
+}

@@ -1,0 +1,67 @@
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.45);
+  display: grid;
+  place-items: center;
+  z-index: 9999;
+  padding: 1rem;
+}
+
+.modal {
+  background: #fff;
+  border-radius: 12px;
+  padding: 1rem 1.1rem;
+  width: min(360px, 100%);
+  box-shadow: 0 22px 48px rgba(15, 23, 42, 0.28);
+}
+
+.modal-title {
+  margin: 0 0 0.65rem;
+  font-size: 1rem;
+}
+
+.admin-token-backdrop {
+  z-index: 10002;
+}
+
+.admin-token-modal {
+  width: min(300px, 100%);
+  padding: 0.85rem 0.95rem;
+}
+
+.admin-token-title {
+  margin-bottom: 0.5rem;
+  font-size: 0.92rem;
+  font-weight: 600;
+  text-align: center;
+}
+
+.admin-token-input {
+  font-size: 0.9rem;
+}
+
+.admin-token-modal .modal-actions {
+  margin-top: 0.55rem;
+}
+
+.modal-input {
+  width: 100%;
+  padding: 0.5rem 0.55rem;
+  border-radius: 8px;
+  border: 1px solid rgba(15, 23, 42, 0.15);
+  font: inherit;
+}
+
+.modal-err {
+  color: #c0392b;
+  font-size: 0.85rem;
+  margin: 0.35rem 0 0;
+}
+
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+}

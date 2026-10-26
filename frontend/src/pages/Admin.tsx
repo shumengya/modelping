@@ -11,7 +11,7 @@ import {
   adminUpdateMonitor,
 } from "../api";
 import { MonitorCard } from "../components/MonitorCard";
-import { useAppBoot } from "../context/AppBootContext";
+import { useAppBoot } from "../context/useAppBoot";
 import {
   clearAdminToken,
   getAdminToken,
@@ -19,8 +19,11 @@ import {
   type AdminMonitorRow,
   type MonitorProtocol,
 } from "../types";
+import common from "../styles/common.module.css";
+import dialogStyles from "../styles/dialog.module.css";
+import styles from "./Admin.module.css";
 
-const INTERVALS = [1, 5, 10, 30, 60, 360] as const;
+const INTERVALS = [5, 10, 30, 60, 360] as const;
 /** 管理页与首页一致：拉取最新监控与统计数据 */
 const ADMIN_REFRESH_MS = 60_000;
 
@@ -51,6 +54,7 @@ export function Admin() {
   }, []);
   const [urlVerifying, setUrlVerifying] = useState(false);
   const authAttempt = useRef(0);
+  const refreshInFlightRef = useRef<Promise<void> | null>(null);
 
   const [rows, setRows] = useState<Row[] | null>(null);
   const [globalForm, setGlobalForm] = useState({
@@ -66,9 +70,10 @@ export function Admin() {
   const refreshAll = () => {
     if (!getAdminToken()) {
       setRows([]);
-      return;
+      return Promise.resolve();
     }
-    void Promise.all([adminListMonitors(), adminGetProbeSettings()])
+    if (refreshInFlightRef.current) return refreshInFlightRef.current;
+    const request = Promise.all([adminListMonitors(), adminGetProbeSettings()])
       .then(([list, g]) => {
         setRows(list);
         setGlobalForm({
@@ -77,16 +82,24 @@ export function Admin() {
         });
         setMsg(null);
       })
-      .catch(() => setMsg("加载失败，请重新使用带 token 的链接登录"));
+      .catch(() => setMsg("加载失败，请重新使用带 token 的链接登录"))
+      .finally(() => {
+        refreshInFlightRef.current = null;
+      });
+    refreshInFlightRef.current = request;
+    return request;
   };
 
   const refreshAllRef = useRef(refreshAll);
-  refreshAllRef.current = refreshAll;
+
+  useEffect(() => {
+    refreshAllRef.current = refreshAll;
+  });
 
   useEffect(() => {
     if (!hasToken) return;
     const tick = () => {
-      refreshAllRef.current();
+      if (document.visibilityState === "visible") void refreshAllRef.current();
     };
     const t = setInterval(tick, ADMIN_REFRESH_MS);
     const onVis = () => {
@@ -138,35 +151,8 @@ export function Admin() {
   }, [searchParams, navigate]);
 
   useEffect(() => {
-    let cancelled = false;
-    const run = async () => {
-      if (!getAdminToken()) {
-        if (!cancelled) {
-          setRows([]);
-        }
-        return;
-      }
-      try {
-        const [list, g] = await Promise.all([adminListMonitors(), adminGetProbeSettings()]);
-        if (!cancelled) {
-          setRows(list);
-          setGlobalForm({
-            probe_interval_minutes: g.probe_interval_minutes as (typeof INTERVALS)[number],
-            probe_prompts: g.probe_prompts,
-          });
-          setMsg(null);
-        }
-      } catch {
-        if (!cancelled) {
-          setRows([]);
-          setMsg("加载失败，请重新使用带 token 的链接登录");
-        }
-      }
-    };
-    void run();
-    return () => {
-      cancelled = true;
-    };
+    if (!hasToken) return;
+    if (document.visibilityState === "visible") queueMicrotask(() => void refreshAllRef.current());
   }, [hasToken]);
 
   useEffect(() => {
@@ -277,18 +263,18 @@ export function Admin() {
   };
 
   return (
-    <div className="page admin">
-      <div className="admin-actions-bar">
-        <button type="button" className="btn ghost" onClick={logout}>
+    <div className={common.page}>
+      <div className={styles.adminActionsBar}>
+        <button type="button" className={`${common.btn} ${common.ghost}`} onClick={logout}>
           退出管理
         </button>
       </div>
 
-      {msg ? <p className="banner">{msg}</p> : null}
+      {msg ? <p className={common.banner}>{msg}</p> : null}
 
-      <section className="admin-form-section">
+      <section className={styles.adminFormSection}>
         <h2>全局设置</h2>
-        <form className="admin-form" onSubmit={saveGlobal}>
+        <form className={styles.adminForm} onSubmit={saveGlobal}>
           <label>
             探测间隔
             <select
@@ -316,34 +302,34 @@ export function Admin() {
               onChange={(e) => setGlobalForm((f) => ({ ...f, probe_prompts: e.target.value }))}
             />
           </label>
-          <div className="form-actions">
-            <button type="submit" className="btn primary">
+          <div className={styles.formActions}>
+            <button type="submit" className={`${common.btn} ${common.primary}`}>
               保存全局设置
             </button>
           </div>
         </form>
       </section>
 
-      <section className="admin-monitors-section">
-        <div className="admin-monitors-head">
+      <section>
+        <div className={styles.adminMonitorsHead}>
           <h2>监控列表</h2>
-          <button type="button" className="btn primary" onClick={openNewMonitorModal}>
+          <button type="button" className={`${common.btn} ${common.primary}`} onClick={openNewMonitorModal}>
             新增监控
           </button>
         </div>
-        <div className="card-grid admin-monitor-grid">
+        <div className={`${common.cardGrid} ${styles.adminMonitorGrid}`}>
           {(rows ?? []).map((r) => {
             const bar = (
-              <div className="card-admin-footer-inner">
-                <button type="button" className="btn small" onClick={() => void adminRunMonitor(r.id).then(refreshAll)}>
+              <div className={styles.cardAdminFooterInner}>
+                <button type="button" className={`${common.btn} ${common.small}`} onClick={() => void adminRunMonitor(r.id).then(refreshAll)}>
                   立即探测
                 </button>
-                <button type="button" className="btn small" onClick={() => openEditMonitor(r)}>
+                <button type="button" className={`${common.btn} ${common.small}`} onClick={() => openEditMonitor(r)}>
                   编辑
                 </button>
                 <button
                   type="button"
-                  className="btn small danger"
+                  className={`${common.btn} ${common.small} ${common.danger}`}
                   onClick={() => {
                     if (confirm("确定删除？")) void adminDeleteMonitor(r.id).then(refreshAll);
                   }}
@@ -359,22 +345,22 @@ export function Admin() {
 
       <dialog
         ref={monitorFormDlgRef}
-        className="probe-detail-dialog admin-monitor-dialog"
+        className={`${dialogStyles.probeDetailDialog} ${dialogStyles.adminMonitorDialog}`}
         onClose={onMonitorFormDialogClose}
       >
-        <div className="probe-detail-inner admin-monitor-dialog-inner">
-          <header className="probe-detail-head">
-            <h3 className="probe-detail-title">{editing ? "编辑监控" : "新建监控"}</h3>
+        <div className={`${dialogStyles.probeDetailInner} ${dialogStyles.adminMonitorDialogInner}`}>
+          <header className={dialogStyles.probeDetailHead}>
+            <h3 className={dialogStyles.probeDetailTitle}>{editing ? "编辑监控" : "新建监控"}</h3>
             <button
               type="button"
-              className="probe-detail-close"
+              className={dialogStyles.probeDetailClose}
               aria-label="关闭"
               onClick={() => monitorFormDlgRef.current?.close()}
             >
               ×
             </button>
           </header>
-          <form className="admin-form admin-form--modal" onSubmit={editing ? saveEdit : submitNew}>
+          <form className={`${styles.adminForm} ${styles.adminFormModal}`} onSubmit={editing ? saveEdit : submitNew}>
             <label>
               显示名称
               <input
@@ -422,7 +408,7 @@ export function Admin() {
               分类（可选）
               <input value={form.category} onChange={(e) => setForm((f) => ({ ...f, category: e.target.value }))} />
             </label>
-            <label className="checkbox-row">
+            <label className={styles.checkboxRow}>
               <input
                 type="checkbox"
                 checked={form.show_on_dashboard}
@@ -430,7 +416,7 @@ export function Admin() {
               />
               在首页展示该监控卡片（关闭则仅后台可见，仍参与定时探测）
             </label>
-            <label className="checkbox-row">
+            <label className={styles.checkboxRow}>
               <input
                 type="checkbox"
                 checked={form.probe_stream}
@@ -438,7 +424,7 @@ export function Admin() {
               />
               使用流式调用（SSE）；关闭则为非流式 JSON，首包耗时为整段响应完成时间
             </label>
-            <label className="checkbox-row">
+            <label className={styles.checkboxRow}>
               <input
                 type="checkbox"
                 checked={form.enabled}
@@ -446,11 +432,11 @@ export function Admin() {
               />
               启用
             </label>
-            <div className="form-actions">
-              <button type="button" className="btn ghost" onClick={() => monitorFormDlgRef.current?.close()}>
+            <div className={styles.formActions}>
+              <button type="button" className={`${common.btn} ${common.ghost}`} onClick={() => monitorFormDlgRef.current?.close()}>
                 取消
               </button>
-              <button type="submit" className="btn primary">
+              <button type="submit" className={`${common.btn} ${common.primary}`}>
                 {editing ? "保存" : "创建"}
               </button>
             </div>

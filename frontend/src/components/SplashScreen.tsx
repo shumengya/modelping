@@ -1,22 +1,23 @@
-import "../splash.css";
+import common from "../styles/common.module.css";
+import styles from "./SplashScreen.module.css";
 
 const APP_NAME = "ModelPing";
 
 export function SplashScreen() {
   return (
-    <div className="splash-screen" role="status" aria-live="polite" aria-busy="true">
-      <div className="splash-bg-glow splash-bg-glow--a" aria-hidden />
-      <div className="splash-bg-glow splash-bg-glow--b" aria-hidden />
+    <div className={styles.splashScreen} role="status" aria-live="polite" aria-busy="true">
+      <div className={`${styles.splashBgGlow} ${styles.splashBgGlowA}`} aria-hidden />
+      <div className={`${styles.splashBgGlow} ${styles.splashBgGlowB}`} aria-hidden />
 
-      <div className="splash-content">
-        <div className="splash-logo-wrap">
-          <div className="splash-rings" aria-hidden>
-            <span className="splash-ring" />
-            <span className="splash-ring" />
-            <span className="splash-ring" />
+      <div className={styles.splashContent}>
+        <div className={styles.splashLogoWrap}>
+          <div className={styles.splashRings} aria-hidden>
+            <span className={styles.splashRing} />
+            <span className={styles.splashRing} />
+            <span className={styles.splashRing} />
           </div>
           <img
-            className="splash-logo"
+            className={styles.splashLogo}
             src="/logo192.png"
             alt=""
             width={96}
@@ -26,17 +27,17 @@ export function SplashScreen() {
           />
         </div>
 
-        <h1 className="splash-title">{APP_NAME}</h1>
-        <p className="splash-subtitle">加载中</p>
+        <h1 className={styles.splashTitle}>{APP_NAME}</h1>
+        <p className={styles.splashSubtitle}>加载中</p>
 
-        <div className="splash-dots" aria-hidden>
+        <div className={styles.splashDots} aria-hidden>
           <span />
           <span />
           <span />
         </div>
       </div>
 
-      <span className="sr-only">{APP_NAME} 正在加载</span>
+      <span className={common.srOnly}>{APP_NAME} 正在加载</span>
     </div>
   );
 }

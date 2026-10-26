@@ -1,4 +1,6 @@
 import { useRegisterSW } from "virtual:pwa-register/react";
+import common from "../styles/common.module.css";
+import styles from "./PwaUpdatePrompt.module.css";
 
 export function PwaUpdatePrompt() {
   const {
@@ -15,15 +17,15 @@ export function PwaUpdatePrompt() {
   if (!needRefresh) return null;
 
   return (
-    <div className="pwa-update-banner" role="alert">
-      <p className="pwa-update-text">发现新版本，更新后即可使用最新功能。</p>
-      <div className="pwa-update-actions">
-        <button type="button" className="btn ghost small" onClick={() => setNeedRefresh(false)}>
+    <div className={styles.pwaUpdateBanner} role="alert">
+      <p className={styles.pwaUpdateText}>发现新版本，更新后即可使用最新功能。</p>
+      <div className={styles.pwaUpdateActions}>
+        <button type="button" className={`${common.btn} ${common.ghost} ${common.small}`} onClick={() => setNeedRefresh(false)}>
           稍后
         </button>
         <button
           type="button"
-          className="btn primary small"
+          className={`${common.btn} ${common.primary} ${common.small}`}
           onClick={() => void updateServiceWorker(true)}
         >
           立即更新

@@ -1,12 +1,13 @@
 import { decryptSecret, encryptSecret } from "./crypto";
 import {
   deleteMonitor,
+  type AppSettingsRow,
   getAppSettings,
   getMonitor,
   insertMonitor,
   insertProbeEvent,
   listDueMonitors,
-  pruneProbeEvents,
+  type MonitorRow,
   updateMonitorMeta,
   updateMonitorRunTimes,
 } from "./db";
@@ -44,11 +45,6 @@ export type RunSingleProbeOutcome = { success: true } | { success: false; error:
 
 export async function runScheduled(env: Env): Promise<void> {
   const db = env.DB;
-  try {
-    await pruneProbeEvents(db);
-  } catch {
-    /* ignore */
-  }
   const nowSec = Math.floor(Date.now() / 1000);
   let due: Awaited<ReturnType<typeof listDueMonitors>>;
   try {
@@ -56,9 +52,18 @@ export async function runScheduled(env: Env): Promise<void> {
   } catch {
     return;
   }
+  if (due.length === 0) return;
+
+  let settings: AppSettingsRow;
+  try {
+    settings = await getAppSettings(db);
+  } catch {
+    return;
+  }
+
   for (const m of due) {
     try {
-      await runSingleProbe(env, m.id, db, nowSec);
+      await runSingleProbe(env, m.id, db, nowSec, { monitor: m, settings });
     } catch {
       /* runSingleProbe should not throw; defensive for unexpected runtime errors */
     }
@@ -69,14 +74,15 @@ export async function runSingleProbe(
   env: Env,
   monitorId: string,
   db: D1Database,
-  nowSec: number
+  nowSec: number,
+  context: { monitor?: MonitorRow; settings?: AppSettingsRow } = {}
 ): Promise<RunSingleProbeOutcome> {
-  const m = await getMonitor(db, monitorId);
+  const m = context.monitor ?? (await getMonitor(db, monitorId));
   if (!m || !m.enabled) return { success: true };
 
-  let settings: Awaited<ReturnType<typeof getAppSettings>>;
+  let settings: AppSettingsRow;
   try {
-    settings = await getAppSettings(db);
+    settings = context.settings ?? (await getAppSettings(db));
   } catch {
     return { success: false, error: "app_settings_unavailable" };
   }

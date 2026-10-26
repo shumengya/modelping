@@ -1,0 +1,84 @@
+.admin-form-section {
+  background: var(--card);
+  border-radius: 14px;
+  padding: 1rem;
+  box-shadow: var(--shadow);
+}
+
+.admin-form {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 0.65rem 1rem;
+}
+
+.admin-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: 0.85rem;
+  color: #374151;
+}
+
+.admin-form input,
+.admin-form select,
+.admin-form textarea {
+  padding: 0.45rem 0.5rem;
+  border-radius: 8px;
+  border: 1px solid rgba(15, 23, 42, 0.14);
+  font: inherit;
+}
+
+.admin-form textarea {
+  grid-column: 1 / -1;
+  min-height: 5.5rem;
+  resize: vertical;
+}
+
+.checkbox-row {
+  flex-direction: row !important;
+  align-items: center;
+  gap: 0.4rem !important;
+}
+
+.form-actions {
+  grid-column: 1 / -1;
+  display: flex;
+  gap: 0.5rem;
+  justify-content: flex-end;
+}
+
+.admin-monitor-grid {
+  margin-top: 0.75rem;
+}
+
+.admin-monitors-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.admin-monitors-head h2 {
+  margin: 0;
+}
+
+.admin-form--modal {
+  overflow-y: auto;
+  padding-right: 0.15rem;
+  flex: 1;
+  min-height: 0;
+}
+
+.card-admin-footer-inner {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  justify-content: flex-end;
+  align-items: center;
+}
+
+.admin-actions-bar {
+  display: flex;
+  justify-content: flex-end;
+}

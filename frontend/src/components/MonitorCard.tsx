@@ -1,5 +1,7 @@
 import { useRef, type ReactNode } from "react";
 import type { MonitorDto } from "../types";
+import dialogStyles from "../styles/dialog.module.css";
+import styles from "./MonitorCard.module.css";
 
 function formatPct(v: number | null): string {
   if (v == null) return "—";
@@ -19,46 +21,41 @@ function protocolCardLines(p: MonitorDto["protocol"]): { name: string; path: str
   return { name: "OpenAI Chat Completions", path: "（/v1/chat/completions）" };
 }
 
+function metricClass(accent?: string): string {
+  return accent ? `${styles.cardMetricValue} ${accent}` : styles.cardMetricValue;
+}
+
 function httpStatusValueClass(st: number | undefined | null): string {
-  if (st == null) return "card-metric-value card-metric-value-muted";
-  if (st >= 200 && st < 300) return "card-metric-value card-accent-http-ok";
-  if (st >= 300 && st < 400) return "card-metric-value card-accent-http-info";
-  if (st >= 400 && st < 500) return "card-metric-value card-accent-http-client";
-  if (st >= 500) return "card-metric-value card-accent-http-server";
-  return "card-metric-value";
+  if (st == null) return metricClass(styles.cardMetricValueMuted);
+  if (st >= 200 && st < 300) return metricClass(styles.cardAccentHttpOk);
+  if (st >= 300 && st < 400) return metricClass(styles.cardAccentHttpInfo);
+  if (st >= 400 && st < 500) return metricClass(styles.cardAccentHttpClient);
+  if (st >= 500) return metricClass(styles.cardAccentHttpServer);
+  return metricClass();
 }
 
 function latencyValueClass(ms: number | undefined | null): string {
-  if (ms == null) return "card-metric-value card-metric-value-muted";
-  if (ms < 500) return "card-metric-value card-accent-latency-good";
-  if (ms < 1500) return "card-metric-value card-accent-latency-mid";
-  return "card-metric-value card-accent-latency-slow";
+  if (ms == null) return metricClass(styles.cardMetricValueMuted);
+  if (ms < 500) return metricClass(styles.cardAccentLatencyGood);
+  if (ms < 1500) return metricClass(styles.cardAccentLatencyMid);
+  return metricClass(styles.cardAccentLatencySlow);
 }
 
 /** 与「可用率」色带一致，用于 24h 与卡片中部大字 */
 function pctAccentClass(pct: number | null): string {
-  if (pct == null) return "card-metric-value-muted";
-  if (pct >= 99) return "card-accent-pct-high";
-  if (pct >= 95) return "card-accent-pct-mid";
-  if (pct >= 90) return "card-accent-pct-low";
-  return "card-accent-pct-critical";
+  if (pct == null) return styles.cardMetricValueMuted;
+  if (pct >= 99) return styles.cardAccentPctHigh;
+  if (pct >= 95) return styles.cardAccentPctMid;
+  if (pct >= 90) return styles.cardAccentPctLow;
+  return styles.cardAccentPctCritical;
 }
 
 function availabilityValueClass(pct: number | null): string {
-  return `card-metric-value ${pctAccentClass(pct)}`;
+  return metricClass(pctAccentClass(pct));
 }
 
 /** 时间条桶为上海时区 00–12 / 12–24（与 Worker 一致） */
 const TIMELINE_SHANGHAI_OFF = 8 * 3600;
-const HALF_DAY_SEC = 43200;
-
-/** 当前时刻在上海时区属于上午还是下午（与时间条最右一格一致） */
-function shanghaiAmPmNow(): "上午" | "下午" {
-  const nowSec = Math.floor(Date.now() / 1000);
-  const L = nowSec + TIMELINE_SHANGHAI_OFF;
-  const secInDay = ((L % 86400) + 86400) % 86400;
-  return secInDay < HALF_DAY_SEC ? "上午" : "下午";
-}
 
 function formatTimelineSlotLabel(t: number): string {
   const half = (t + TIMELINE_SHANGHAI_OFF) % 86400 === 0 ? "上午" : "下午";
@@ -71,6 +68,13 @@ function formatTimelineSlotLabel(t: number): string {
 }
 
 /** 时间条：无数据灰、全成功绿、部分成功黄、全失败红 */
+const TL_TONE_CLASS = {
+  none: styles.tlNone,
+  up: styles.tlUp,
+  warn: styles.tlWarn,
+  down: styles.tlDown,
+} as const;
+
 function timelineSegTone(d: MonitorDto["timelineDaily"][number]): "none" | "up" | "warn" | "down" {
   if (d.hasData === false) return "none";
   if (d.up) return "up";
@@ -97,9 +101,19 @@ function formatLastProbeTime(ts: number): string {
   });
 }
 
+const TIMELINE_SLOT_COUNT = 60;
+
+type TimelineSeg = MonitorDto["timelineDaily"][number];
+
+/** 只保留有探测数据的格子，按时间顺序靠右排列，左侧补空位。 */
+function rightAlignedTimeline(daily: TimelineSeg[]): Array<TimelineSeg | null> {
+  const withData = daily.filter((d) => d.hasData !== false).slice(-TIMELINE_SLOT_COUNT);
+  return [...Array<null>(TIMELINE_SLOT_COUNT - withData.length).fill(null), ...withData];
+}
+
 export function MonitorCard({ m, footerExtra }: { m: MonitorDto; footerExtra?: ReactNode }) {
   const dlgRef = useRef<HTMLDialogElement>(null);
-  const timelineDaily = Array.isArray(m.timelineDaily) ? m.timelineDaily : [];
+  const timelineSegs = rightAlignedTimeline(Array.isArray(m.timelineDaily) ? m.timelineDaily : []);
   const ok = m.lastProbe?.ok === 1;
   const ft = m.lastProbe?.first_token_ms;
   const st = m.lastProbe?.http_status;
@@ -111,105 +125,101 @@ export function MonitorCard({ m, footerExtra }: { m: MonitorDto; footerExtra?: R
   const protoLines = protocolCardLines(m.protocol);
 
   return (
-    <article className="card">
-      <header className="card-head">
-        <div className="card-title-row">
+    <article className={styles.card}>
+      <header className={styles.cardHead}>
+        <div className={styles.cardTitleRow}>
           <div>
-            <h2 className="card-name">{m.display_name}</h2>
-            <div className="card-sub card-sub-stack">
-              <div className="card-sub-row card-sub-row-model">
-                <span className="card-sub-model">{m.model}</span>
+            <h2 className={styles.cardName}>{m.display_name}</h2>
+            <div className={`${styles.cardSub} ${styles.cardSubStack}`}>
+              <div className={styles.cardSubRowModel}>
+                <span className={styles.cardSubModel}>{m.model}</span>
               </div>
-              <div className="card-sub-col-protocol">
-                <span className="card-sub-protocol">{protoLines.name}</span>
-                <span className="card-sub-protocol-path">{protoLines.path}</span>
+              <div className={styles.cardSubColProtocol}>
+                <span className={styles.cardSubProtocol}>{protoLines.name}</span>
+                <span className={styles.cardSubProtocolPath}>{protoLines.path}</span>
                 {m.category?.trim() ? (
-                  <span className="card-sub-meta card-sub-meta-after">{m.category.trim()}</span>
+                  <span className={`${styles.cardSubMeta} ${styles.cardSubMetaAfter}`}>{m.category.trim()}</span>
                 ) : null}
-                <span className="card-sub-meta card-sub-meta-after">
+                <span className={`${styles.cardSubMeta} ${styles.cardSubMetaAfter}`}>
                   {m.probe_stream !== 0 ? "流式" : "非流式"}
                 </span>
                 {m.show_on_dashboard === 0 ? (
-                  <span className="card-sub-meta card-sub-meta-after">首页隐藏</span>
+                  <span className={`${styles.cardSubMeta} ${styles.cardSubMetaAfter}`}>首页隐藏</span>
                 ) : null}
-                {m.enabled === 0 ? <span className="card-sub-paused card-sub-paused-after">已停用</span> : null}
+                {m.enabled === 0 ? <span className={`${styles.cardSubPaused} ${styles.cardSubPausedAfter}`}>已停用</span> : null}
               </div>
             </div>
           </div>
         </div>
-        <div className="card-head-right">
-          <span className={`badge ${ok ? "badge-ok" : "badge-bad"}`}>
+        <div className={styles.cardHeadRight}>
+          <span className={`${styles.badge} ${ok ? styles.badgeOk : styles.badgeBad}`}>
             {ok ? "运行正常" : m.lastProbe ? "异常" : "尚无数据"}
           </span>
-          <button type="button" className="btn-detail" onClick={openDetail}>
+          <button type="button" className={styles.btnDetail} onClick={openDetail}>
             详情
           </button>
         </div>
       </header>
 
       <div
-        className="timeline"
+        className={styles.timeline}
         role="img"
-        aria-label={`约 30 天、上海时区每格半天（0–12 点为上午，12–24 点为下午），右侧为当前${shanghaiAmPmNow()}`}
+        aria-label="上海时区每格半天（0–12 点为上午，12–24 点为下午），最新数据在右侧"
       >
-        {timelineDaily.length === 0 ? (
-          <div className="timeline-empty">暂无历史条形数据</div>
-        ) : (
-          timelineDaily.map((d) => (
-            <span
-              key={d.t}
-              className={`tl-seg tl-${timelineSegTone(d)}`}
-              title={timelineSegTitle(d)}
-            />
-          ))
+        {timelineSegs.map((d, i) =>
+          d ? (
+            <span key={d.t} className={`${styles.tlSeg} ${TL_TONE_CLASS[timelineSegTone(d)]}`} title={timelineSegTitle(d)} />
+          ) : (
+            <span key={`empty-${i}`} className={`${styles.tlSeg} ${styles.tlNone}`} />
+          )
         )}
       </div>
 
-      <div className="card-mid">
-        <span className="card-mid-edge">约 30 天前</span>
+      <div className={styles.cardMid}>
+        <span className={styles.cardMidEdge}>较早</span>
         <strong className={`card-mid-pct ${pctAccentClass(pct30)}`}>{formatPct(pct30)} 可用率</strong>
-        <span className="card-mid-edge">{shanghaiAmPmNow()}</span>
+        <span className={styles.cardMidEdge}>最新</span>
       </div>
 
-      <footer className="card-foot">
-        <div className="card-foot-cell">
-          <span className="card-foot-label">状态</span>
+      <footer className={styles.cardFoot}>
+        <div className={styles.cardFootCell}>
+          <span className={styles.cardFootLabel}>状态</span>
           <span className={httpStatusValueClass(st ?? null)}>{st != null ? st : "—"}</span>
         </div>
-        <div className="card-foot-cell">
-          <span className="card-foot-label">首字延迟</span>
+        <div className={styles.cardFootCell}>
+          <span className={styles.cardFootLabel}>首字延迟</span>
           <span className={latencyValueClass(ft ?? null)}>{ft != null ? `${ft} ms` : "—"}</span>
         </div>
-        <div className="card-foot-cell">
-          <span className="card-foot-label">24h 可用</span>
+        <div className={styles.cardFootCell}>
+          <span className={styles.cardFootLabel}>24h 可用</span>
           <span className={availabilityValueClass(m.availability24h)}>{formatPct(m.availability24h)}</span>
         </div>
-        <div className="card-foot-cell card-foot-probe-time">
-          <span className="card-foot-label">探测时间</span>
+        <div className={`${styles.cardFootCell} ${styles.cardFootProbeTime}`}>
+          <span className={styles.cardFootLabel}>探测时间</span>
           <span
-            className={probe ? "card-foot-probe-value" : "card-foot-probe-value card-metric-value-muted"}
+            className={probe ? styles.cardFootProbeValue : `${styles.cardFootProbeValue} ${styles.cardMetricValueMuted}`}
           >
             {probe ? formatLastProbeTime(probe.ts) : "—"}
           </span>
         </div>
-        <div className="card-foot-wide card-foot-count-row">
-          <span className="card-foot-label">探测次数</span>
-          <span className="card-foot-count-value">{m.probe_count}</span>
+        <div className={`${styles.cardFootWide} ${styles.cardFootCountRow}`}>
+          <span className={styles.cardFootLabel}>探测次数</span>
+          <span className={styles.cardFootCountValue}>{m.probe_count}</span>
         </div>
       </footer>
 
-      {footerExtra ? <div className="card-admin-footer">{footerExtra}</div> : null}
+      {footerExtra ? <div className={styles.cardAdminFooter}>{footerExtra}</div> : null}
 
-      <dialog ref={dlgRef} className="probe-detail-dialog">
-        <div className="probe-detail-inner">
-          <header className="probe-detail-head">
-            <h3 className="probe-detail-title">最近探测详情</h3>
-            <button type="button" className="probe-detail-close" aria-label="关闭" onClick={closeDetail}>
+      <dialog ref={dlgRef} className={dialogStyles.probeDetailDialog}>
+        <div className={dialogStyles.probeDetailInner}>
+          <header className={dialogStyles.probeDetailHead}>
+            <h3 className={dialogStyles.probeDetailTitle}>最近探测详情</h3>
+            <button type="button" className={dialogStyles.probeDetailClose} aria-label="关闭" onClick={closeDetail}>
               ×
             </button>
           </header>
-          <div className="probe-detail-body">
-            <dl className="probe-detail-dl">
+          <div>
+            <dl className={styles.probeDetailDl}>
               <dt>显示名称</dt>
               <dd>{m.display_name}</dd>
               <dt>协议</dt>
@@ -218,8 +228,8 @@ export function MonitorCard({ m, footerExtra }: { m: MonitorDto; footerExtra?: R
               <dd>{m.model}</dd>
               <dt>API 根地址</dt>
               <dd>
-                <code className="probe-detail-code">{m.api_base_url}</code>
-                <div className="probe-detail-link-wrap">
+                <code className={styles.probeDetailCode}>{m.api_base_url}</code>
+                <div className={styles.probeDetailLinkWrap}>
                   <a href={m.api_base_url} target="_blank" rel="noreferrer">
                     在浏览器中打开
                   </a>
@@ -242,17 +252,17 @@ export function MonitorCard({ m, footerExtra }: { m: MonitorDto; footerExtra?: R
               <dd>{probe?.first_token_ms != null ? `${probe.first_token_ms} ms` : "—"}</dd>
             </dl>
             {probe?.error_message ? (
-              <div className="probe-detail-error">
+              <div className={styles.probeDetailError}>
                 <strong>错误信息</strong>
-                <pre className="probe-detail-pre">{probe.error_message}</pre>
+                <pre className={styles.probeDetailPre}>{probe.error_message}</pre>
               </div>
             ) : null}
             {probe ? (
-              <div className="probe-detail-io">
+              <div className={styles.probeDetailIo}>
                 <strong>输入（本次请求发送的用户消息）</strong>
-                <pre className="probe-detail-io-pre">{probe.probe_input ?? "—"}</pre>
+                <pre className={styles.probeDetailIoPre}>{probe.probe_input ?? "—"}</pre>
                 <strong>输出（模型流式正文摘要，最长约数千字）</strong>
-                <pre className="probe-detail-io-pre probe-detail-io-out">
+                <pre className={`${styles.probeDetailIoPre} ${styles.probeDetailIoOut}`}>
                   {probe.probe_output ?? "—"}
                 </pre>
               </div>

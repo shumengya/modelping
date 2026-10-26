@@ -59,6 +59,18 @@ export default defineConfig({
         globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
         navigateFallback: '/index.html',
         cleanupOutdatedCaches: true,
+        runtimeCaching: [
+          {
+            // 字体来自自建 CDN，不进 precache，首次访问后缓存一年以便离线可用
+            urlPattern: /^https:\/\/cdn\.smyhub\.com\/fonts\/.*\.woff2$/,
+            handler: 'CacheFirst',
+            options: {
+              cacheName: 'cdn-fonts',
+              expiration: { maxEntries: 4, maxAgeSeconds: 60 * 60 * 24 * 365 },
+              cacheableResponse: { statuses: [0, 200] },
+            },
+          },
+        ],
       },
     }),
     cloudflare(),

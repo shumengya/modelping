@@ -1,7 +1,30 @@
+/* 字体：中文用「霞鹜文楷等宽」、非中文用「Maple Mono」，均由自建 CDN 提供（已开 CORS、缓存 30 天）。
+   两家 @font-face 用互斥的 unicode-range 切分，浏览器按页面实际出现的字符类型只拉取需要的那一份。 */
+@font-face {
+  font-family: "ModelPing Latin";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("https://cdn.smyhub.com/fonts/MapleMono-Regular.woff2") format("woff2");
+  unicode-range: U+0000-2E7F, U+A000-ABFF, U+FB00-FB4F;
+}
+
+@font-face {
+  font-family: "ModelPing CJK";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("https://cdn.smyhub.com/fonts/LXGWWenKaiMono-Regular.woff2") format("woff2");
+  unicode-range: U+2E80-2EFF, U+2F00-2FDF, U+3000-303F, U+3040-30FF, U+3100-312F, U+3190-31EF,
+    U+3200-33FF, U+3400-4DBF, U+4E00-9FFF, U+F900-FAFF, U+FE10-FE1F, U+FE30-FE4F, U+FF00-FFEF,
+    U+20000-2FA1F, U+30000-3134F;
+}
+
 :root {
-  /* 主字体：LXGW WenKai Mono（等宽，由 Vite 打包子集 woff2）；无则回退系统字体 */
-  --font-app: "LXGW WenKai Mono", "PingFang SC", "Microsoft YaHei", "Segoe UI", system-ui, sans-serif;
-  --font-mono: "LXGW WenKai Mono", ui-monospace, "Cascadia Code", monospace;
+  /* 主字体：非中文 Maple Mono → 中文霞鹜文楷等宽 → 系统字体兜底 */
+  --font-app: "ModelPing Latin", "ModelPing CJK", "PingFang SC", "Microsoft YaHei", "Segoe UI", system-ui,
+    sans-serif;
+  --font-mono: "ModelPing Latin", "ModelPing CJK", ui-monospace, "Cascadia Code", monospace;
   /* 随机背景高斯模糊（CSS blur 无百分比，按「10%」诉求取 10px，可按需改） */
   --rand-bg-blur: 10px;
   --rand-bg-scale: 1.08;

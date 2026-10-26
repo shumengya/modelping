@@ -81,7 +81,8 @@ export async function listMonitorsPublic(
   db: D1Database,
   visibility: "all" | "dashboard" = "all"
 ): Promise<MonitorPublic[]> {
-  const where = visibility === "dashboard" ? " WHERE show_on_dashboard = 1" : "";
+  const where =
+    visibility === "dashboard" ? " WHERE show_on_dashboard = 1 AND enabled = 1" : "";
   const r = await db
     .prepare(
       `SELECT id, display_name, api_base_url, model, protocol, enabled, category,

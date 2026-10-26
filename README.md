@@ -11,7 +11,7 @@
 
 - 管理端配置：API 根地址、API Key、模型名、协议（**OpenAI Chat Completions 经典** / **OpenAI Responses 新版** / Claude Anthropic）。
 - 探测间隔：1、5、10、30、60、360（分钟）。
-- 公开仪表盘：24h / 30d 可用率、按日时间条、最近状态码与首字延迟。
+- 公开仪表盘：24h / 30d 可用率、按日时间条、最近状态码与首字延迟；**已暂停检测（`enabled=0`）的监控不会出现在首页**，仅后台可见。
 - 管理员入口：访问 **`/admin?token=<ADMIN_TOKEN>`**（与 `.dev.vars` / Secrets 中 `ADMIN_TOKEN` 一致即可，示例 `your-strong-token`）。校验通过后 token 写入当前浏览器 `sessionStorage`，并自动 **`replace` 到 `/admin`**（从地址栏去掉 token，减少泄露）。
 - 一键部署：`pnpm build && wrangler deploy`（Cloudflare Vite 插件会自动使用 `dist/modelping` 构建产物与资源目录）。
 

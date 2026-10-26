@@ -221,6 +221,8 @@ app.get("/api/monitors/:id", async (c) => {
   const [m, s] = await Promise.all([getMonitor(db, id), getAppSettings(db)]);
   if (!m) return c.json({ error: "not_found" }, 404);
   if (m.show_on_dashboard === 0) return c.json({ error: "not_found" }, 404);
+  // 后端已暂停探测（enabled=0）的监控不对公开端暴露
+  if (m.enabled === 0) return c.json({ error: "not_found" }, 404);
   const stats = await availabilityAndTimeline(db, id);
   const timelineDaily = timelineDailyFromBuckets(stats.daily);
   return c.json({

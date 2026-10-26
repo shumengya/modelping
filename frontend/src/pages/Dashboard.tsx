@@ -48,16 +48,19 @@ export function Dashboard() {
     if (rows !== null) signalBootReady();
   }, [rows, signalBootReady]);
 
+  /** 后端已暂停探测（enabled=0）的监控不在首页展示；兼容服务端缓存未过期时拿到的旧列表。 */
+  const visible = useMemo(() => (rows ?? []).filter((m) => m.enabled !== 0), [rows]);
+
   const categories = useMemo(() => {
     const s = new Set<string>();
-    for (const m of rows ?? []) {
+    for (const m of visible) {
       if (m.category?.trim()) s.add(m.category.trim());
     }
     return ["__all__", ...[...s].sort()];
-  }, [rows]);
+  }, [visible]);
 
   const filtered = useMemo(() => {
-    let list = rows ?? [];
+    let list = visible;
     if (filterCat !== "__all__") list = list.filter((m) => (m.category || "").trim() === filterCat);
     const qq = q.trim().toLowerCase();
     if (qq) {
@@ -69,10 +72,10 @@ export function Dashboard() {
       );
     }
     return list;
-  }, [rows, filterCat, q]);
+  }, [visible, filterCat, q]);
 
-  const online = (rows ?? []).filter((m) => m.lastProbe?.ok === 1).length;
-  const offline = (rows ?? []).filter((m) => m.lastProbe && m.lastProbe.ok !== 1).length;
+  const online = visible.filter((m) => m.lastProbe?.ok === 1).length;
+  const offline = visible.filter((m) => m.lastProbe && m.lastProbe.ok !== 1).length;
 
   return (
     <div className={common.page}>
@@ -105,7 +108,9 @@ export function Dashboard() {
 
       {err ? <p className={`${common.banner} ${common.error}`}>{err}</p> : null}
 
-      {rows?.length === 0 ? <p className={common.muted}>暂无监控项。请从管理入口添加。</p> : null}
+      {rows !== null && visible.length === 0 ? (
+        <p className={common.muted}>暂无监控项。请从管理入口添加。</p>
+      ) : null}
 
       <div className={common.cardGrid}>
         {filtered.map((m) => (

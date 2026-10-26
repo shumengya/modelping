@@ -2,6 +2,14 @@
 <html lang="zh-CN">
   <head>
     <meta charset="UTF-8" />
+    <!-- 中文正文字体提前预加载（跨域字体必须带 crossorigin），避免首屏先闪一下系统字体 -->
+    <link
+      rel="preload"
+      href="https://cdn.smyhub.com/fonts/LXGWWenKaiMono-Regular.woff2"
+      as="font"
+      type="font/woff2"
+      crossorigin
+    />
     <link rel="icon" href="/favicon.ico" type="image/x-icon" />
     <link rel="apple-touch-icon" href="/logo192.png" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />

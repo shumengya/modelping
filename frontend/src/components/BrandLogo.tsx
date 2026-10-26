@@ -32,7 +32,7 @@ export function BrandLogo() {
     <>
       <img
         className={styles.brandLogo}
-        src="/logo.png"
+        src="/logo192.png"
         alt=""
         width={40}
         height={40}

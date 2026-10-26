@@ -24,7 +24,9 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: 'prompt',
-      includeAssets: ['favicon.ico', 'logo.png', 'logo192.png', 'logo512.png'],
+      includeAssets: ['favicon.ico', 'logo192.png'],
+      // manifest 里的图标默认会被自动加入预缓存；logo512 只在安装 PWA 时才需要，不必让首次访问去下载
+      includeManifestIcons: false,
       manifest: {
         name: 'ModelPing',
         short_name: 'ModelPing',
@@ -57,6 +59,8 @@ export default defineConfig({
       },
       workbox: {
         globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
+        // logo.png(1.4MB)已无页面引用，logo512 只给 PWA 安装图标用，浏览器按需下载，不必在首次访问时预缓存
+        globIgnores: ['logo.png', 'logo512.png'],
         navigateFallback: '/index.html',
         cleanupOutdatedCaches: true,
         runtimeCaching: [

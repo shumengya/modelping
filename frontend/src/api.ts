@@ -35,7 +35,30 @@ function saveFailedMessage(r: AxiosResponse): string {
   return parts || `保存失败（HTTP ${r.status}）`;
 }
 
+/** index.html 内联脚本提前发出的首页数据请求；超过这个时长就认为太旧，重新请求 */
+const EARLY_MONITORS_MAX_AGE_MS = 30_000;
+
+declare global {
+  interface Window {
+    __earlyMonitors?: { at: number; promise: Promise<MonitorDto[]> };
+  }
+}
+
+/** 取走（只取一次）index.html 提前发出的请求结果；不可用或失败时返回 null，由调用方走常规请求 */
+async function takeEarlyMonitors(): Promise<MonitorDto[] | null> {
+  const early = window.__earlyMonitors;
+  window.__earlyMonitors = undefined;
+  if (!early || Date.now() - early.at > EARLY_MONITORS_MAX_AGE_MS) return null;
+  try {
+    return await early.promise;
+  } catch {
+    return null;
+  }
+}
+
 export async function fetchMonitors(): Promise<MonitorDto[]> {
+  const early = await takeEarlyMonitors();
+  if (early) return early;
   const r = await http.get<MonitorDto[]>("/api/monitors", NO_STORE);
   if (!isOk(r)) throw new Error("failed_to_load");
   return r.data;

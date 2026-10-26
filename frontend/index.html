@@ -22,8 +22,226 @@
     <title>ModelPing</title>
     <!-- 字体：西文 Maple Mono、中文霞鹜文楷等宽，均来自自建 CDN（@font-face 定义在 src/index.css） -->
     <link rel="preconnect" href="https://cdn.smyhub.com" crossorigin />
+    <!-- 首页数据请求提前到这里发出，与 JS 包下载并行；前端 api.ts 的 fetchMonitors 会接手这个 Promise。
+         必须是普通内联脚本（非 module），Vite 不会改写它；用 fetch 而非 axios，因为此时包还没加载。 -->
+    <script>
+      (function () {
+        if (location.pathname !== "/") return;
+        window.__earlyMonitors = {
+          at: Date.now(),
+          promise: fetch("/api/monitors", { cache: "no-store" }).then(function (r) {
+            if (!r.ok) throw new Error("early_monitors_" + r.status);
+            return r.json();
+          }),
+        };
+        // 避免没人接手时触发 unhandledrejection；真正的失败由接手方重试
+        window.__earlyMonitors.promise.catch(function () {});
+      })();
+    </script>
+    <!-- 启动画面：纯 HTML + 内联样式，JS 包还没下载完就能首屏绘制；应用就绪后由 AppBootContext 移除。 -->
+    <style>
+      #splash-screen {
+        position: fixed;
+        inset: 0;
+        z-index: 10000;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        overflow: hidden;
+        background: linear-gradient(145deg, #dfe6eb 0%, #e8f4ec 28%, #d8efe3 55%, #cfe8d8 78%, #c5e2d2 100%);
+        animation: splash-bg-pulse 5s ease-in-out infinite;
+      }
+      #splash-screen .glow {
+        position: absolute;
+        border-radius: 50%;
+        pointer-events: none;
+        filter: blur(48px);
+        opacity: 0.55;
+      }
+      #splash-screen .glow-a {
+        width: min(72vw, 420px);
+        height: min(72vw, 420px);
+        top: 12%;
+        left: 50%;
+        transform: translateX(-50%);
+        background: radial-gradient(circle, rgba(46, 204, 113, 0.45) 0%, transparent 70%);
+        animation: splash-glow-drift 6s ease-in-out infinite;
+      }
+      #splash-screen .glow-b {
+        width: min(55vw, 320px);
+        height: min(55vw, 320px);
+        bottom: 8%;
+        right: 8%;
+        background: radial-gradient(circle, rgba(39, 174, 96, 0.35) 0%, transparent 72%);
+        animation: splash-glow-drift-b 7s ease-in-out infinite reverse;
+      }
+      #splash-screen .content {
+        position: relative;
+        z-index: 1;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 0.65rem;
+        padding: 1.5rem;
+        text-align: center;
+      }
+      #splash-screen .logo-wrap {
+        position: relative;
+        width: 120px;
+        height: 120px;
+        display: grid;
+        place-items: center;
+        margin-bottom: 0.35rem;
+      }
+      #splash-screen .rings {
+        position: absolute;
+        inset: 0;
+        display: grid;
+        place-items: center;
+        pointer-events: none;
+      }
+      #splash-screen .ring {
+        position: absolute;
+        width: 72px;
+        height: 72px;
+        border: 2px solid rgba(46, 204, 113, 0.55);
+        border-radius: 50%;
+        animation: splash-ring-expand 2.4s ease-out infinite;
+      }
+      #splash-screen .ring:nth-child(2) {
+        animation-delay: 0.8s;
+      }
+      #splash-screen .ring:nth-child(3) {
+        animation-delay: 1.6s;
+      }
+      #splash-screen .logo {
+        position: relative;
+        z-index: 2;
+        width: 96px;
+        height: 96px;
+        object-fit: contain;
+        border-radius: 22px;
+        box-shadow: 0 12px 32px rgba(15, 23, 42, 0.18), 0 0 0 1px rgba(255, 255, 255, 0.65) inset;
+        animation: splash-logo-float 2.8s ease-in-out infinite;
+      }
+      #splash-screen h1 {
+        margin: 0;
+        font-size: clamp(1.65rem, 5vw, 2rem);
+        font-weight: 800;
+        letter-spacing: -0.02em;
+        color: #1e293b;
+      }
+      #splash-screen p {
+        margin: 0;
+        font-size: 0.95rem;
+        font-weight: 500;
+        color: #64748b;
+      }
+      #splash-screen .dots {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 0.45rem;
+        margin-top: 0.5rem;
+      }
+      #splash-screen .dots span {
+        width: 9px;
+        height: 9px;
+        border-radius: 50%;
+        background: #2ecc71;
+        animation: splash-dot-pulse 1.1s ease-in-out infinite;
+      }
+      #splash-screen .dots span:nth-child(2) {
+        animation-delay: 0.18s;
+      }
+      #splash-screen .dots span:nth-child(3) {
+        animation-delay: 0.36s;
+      }
+      @keyframes splash-bg-pulse {
+        0%,
+        100% {
+          filter: brightness(1);
+        }
+        50% {
+          filter: brightness(1.04);
+        }
+      }
+      @keyframes splash-glow-drift {
+        0%,
+        100% {
+          transform: translateX(-50%) scale(1);
+          opacity: 0.5;
+        }
+        50% {
+          transform: translateX(-48%) scale(1.08);
+          opacity: 0.72;
+        }
+      }
+      @keyframes splash-glow-drift-b {
+        0%,
+        100% {
+          transform: scale(1);
+          opacity: 0.4;
+        }
+        50% {
+          transform: scale(1.1);
+          opacity: 0.65;
+        }
+      }
+      @keyframes splash-logo-float {
+        0%,
+        100% {
+          transform: translateY(0);
+        }
+        50% {
+          transform: translateY(-7px);
+        }
+      }
+      @keyframes splash-ring-expand {
+        0% {
+          width: 72px;
+          height: 72px;
+          opacity: 0.75;
+        }
+        100% {
+          width: 128px;
+          height: 128px;
+          opacity: 0;
+        }
+      }
+      @keyframes splash-dot-pulse {
+        0%,
+        100% {
+          transform: scale(0.65);
+          opacity: 0.55;
+        }
+        50% {
+          transform: scale(1);
+          opacity: 1;
+        }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        #splash-screen,
+        #splash-screen * {
+          animation: none !important;
+        }
+      }
+    </style>
   </head>
   <body>
+    <div id="splash-screen" role="status" aria-live="polite" aria-busy="true">
+      <div class="glow glow-a" aria-hidden="true"></div>
+      <div class="glow glow-b" aria-hidden="true"></div>
+      <div class="content">
+        <div class="logo-wrap">
+          <div class="rings" aria-hidden="true"><span class="ring"></span><span class="ring"></span><span class="ring"></span></div>
+          <img class="logo" src="/logo192.png" alt="" width="96" height="96" decoding="async" fetchpriority="high" />
+        </div>
+        <h1>ModelPing</h1>
+        <p>加载中</p>
+        <div class="dots" aria-hidden="true"><span></span><span></span><span></span></div>
+      </div>
+    </div>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
